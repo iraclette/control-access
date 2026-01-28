@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card" style="max-width:520px;margin:0 auto;">
+    <h2 style="margin:0 0 10px;">Admin login</h2>
+    <p class="help" style="margin-top:0;">Enter the admin password to manage flats.</p>
+
+    {% if error %}
+      <div class="error" style="margin: 10px 0;">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/admin-ui/login" class="grid">
+      <input class="input" type="password" name="password" placeholder="Admin password" required>
+      <button class="btn primary" type="submit">Login</button>
+    </form>
+  </div>
+{% endblock %}

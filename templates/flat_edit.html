@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <div class="row" style="margin-bottom: 12px;">
+    <a class="btn" href="/admin-ui/flats">← Back</a>
+    <span class="badge">Flat <b>{{ flat.label }}</b></span>
+
+    {% if flat.access_enabled %}
+      <span class="badge"><span class="dot ok"></span>Access enabled</span>
+    {% else %}
+      <span class="badge"><span class="dot bad"></span>Access disabled</span>
+    {% endif %}
+
+    {% if flat.pin_hash %}
+      <span class="badge"><span class="dot ok"></span>PIN set</span>
+    {% else %}
+      <span class="badge"><span class="dot warn"></span>PIN not set</span>
+    {% endif %}
+  </div>
+
+  {% if request.query_params.get("err") == "dup" %}
+    <div class="error" style="margin-bottom:12px;">That PIN is already used by another flat.</div>
+  {% endif %}
+  {% if request.query_params.get("err") == "badpin" %}
+    <div class="error" style="margin-bottom:12px;">PIN must be 4–12 digits (numbers only).</div>
+  {% endif %}
+
+  <div class="grid two">
+    <div class="card">
+      <h2 style="margin:0 0 10px;">Status</h2>
+      <form method="post" action="/admin-ui/flats/{{ flat.id }}/toggle-access">
+        {% if flat.access_enabled %}
+          <button class="btn danger" type="submit">Disable access</button>
+          <p class="help">Use this when rent is unpaid.</p>
+        {% else %}
+          <button class="btn ok" type="submit">Enable access</button>
+          <p class="help">Re-enable access after payment.</p>
+        {% endif %}
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px;">Change label</h2>
+      <form method="post" action="/admin-ui/flats/{{ flat.id }}/set-label" class="grid">
+        <input class="input" name="label" value="{{ flat.label }}" required>
+        <button class="btn primary" type="submit">Save</button>
+      </form>
+      <p class="help">Example: A-203, B-101, etc.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px;">Set / Replace PIN</h2>
+      <form method="post" action="/admin-ui/flats/{{ flat.id }}/set-pin" class="grid">
+        <input class="input" name="pin" inputmode="numeric" placeholder="e.g. 483921" required>
+        <button class="btn primary" type="submit">Set PIN</button>
+      </form>
+      <p class="help">PIN is stored as a hash (not visible).</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px;">Danger zone</h2>
+      <form method="post" action="/admin-ui/flats/{{ flat.id }}/delete"
+            onsubmit="return confirm('Delete this flat? This cannot be undone.');">
+        <button class="btn danger" type="submit">Delete flat</button>
+      </form>
+      <p class="help">Deleting a flat removes its PIN from access lists after sync.</p>
+    </div>
+  </div>
+
+{% endblock %}
