@@ -8,6 +8,7 @@ class FlatCreate(BaseModel):
 class FlatOut(BaseModel):
     id: int
     label: str
+    name: str
     access_enabled: bool
     has_pin: bool
 

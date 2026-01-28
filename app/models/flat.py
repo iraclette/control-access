@@ -10,7 +10,7 @@ class Flat(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     label: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(nullable=True)
 
     # one PIN per flat
     pin_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)

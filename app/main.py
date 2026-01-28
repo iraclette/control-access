@@ -1,37 +1,57 @@
+import datetime as dt
+import secrets
+
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
-from app.db.session import SessionLocal
-from app.models.flat import Flat
-from sqlalchemy import select
-
 from app.core.security import hash_pin
-from app.models import Flat, SyncState
 from app.db.session import SessionLocal
-
-from fastapi.staticfiles import StaticFiles
+from app.models import Flat, SyncState
 
 app = FastAPI(title="Building Access API (v1)")
+
+# Static + templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Session cookie (for browser login)
-app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_TOKEN)
-
 templates = Jinja2Templates(directory="templates")
 
+# Session cookie for admin UI
+app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_TOKEN)
 
+
+# ---------- helpers ----------
 
 def require_ui_login(request: Request):
     if request.session.get("is_admin") is not True:
         return RedirectResponse("/admin-ui/login", status_code=303)
     return None
 
+
+def bump_version(db):
+    """Bump sync version whenever access-relevant data changes."""
+    st = db.get(SyncState, 1)
+    if st is None:
+        st = SyncState(id=1, version=0)
+        db.add(st)
+        db.flush()
+    st.version += 1
+    db.flush()
+
+def generate_numeric_pin(length: int = 6) -> str:
+    return "".join(secrets.choice("0123456789") for _ in range(length))
+
+# ---------- misc ----------
+
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "ts": dt.datetime.utcnow().isoformat()}
+
+
+# ---------- admin auth (UI) ----------
 
 @app.get("/admin-ui/login", response_class=HTMLResponse)
 def login_page(request: Request):
@@ -52,65 +72,8 @@ def logout(request: Request):
     return RedirectResponse("/admin-ui/login", status_code=303)
 
 
-@app.get("/admin-ui/flats", response_class=HTMLResponse)
-def flats_page(request: Request):
-    redir = require_ui_login(request)
-    if redir:
-        return redir
+# ---------- flats list + add (UI) ----------
 
-    db = SessionLocal()
-    try:
-        flats = db.scalars(select(Flat).order_by(Flat.label.asc())).all()
-        return templates.TemplateResponse("flats.html", {"request": request, "flats": flats})
-    finally:
-        db.close()
-
-
-@app.post("/admin-ui/flats/add")
-def flats_add(request: Request, label: str = Form(...)):
-    redir = require_ui_login(request)
-    if redir:
-        return redir
-
-    db = SessionLocal()
-    try:
-        flat = Flat(label=label.strip(), access_enabled=True)
-        db.add(flat)
-        db.commit()
-    finally:
-        db.close()
-
-    return RedirectResponse("/admin-ui/flats", status_code=303)
-
-
-@app.post("/admin-ui/flats/{flat_id}/toggle")
-def flats_toggle(request: Request, flat_id: int):
-    redir = require_ui_login(request)
-    if redir:
-        return redir
-
-    db = SessionLocal()
-    try:
-        flat = db.get(Flat, flat_id)
-        if flat:
-            flat.access_enabled = not flat.access_enabled
-            db.commit()
-    finally:
-        db.close()
-
-    return RedirectResponse("/admin-ui/flats", status_code=303)
-
-# --- helper: bump sync version whenever access-relevant data changes ---
-def bump_version(db):
-    st = db.get(SyncState, 1)
-    if st is None:
-        st = SyncState(id=1, version=0)
-        db.add(st)
-        db.flush()
-    st.version += 1
-    db.flush()
-
-# --- list page ---
 @app.get("/admin-ui/flats", response_class=HTMLResponse)
 def ui_flats(request: Request):
     redir = require_ui_login(request)
@@ -124,22 +87,33 @@ def ui_flats(request: Request):
     finally:
         db.close()
 
+
 @app.post("/admin-ui/flats/add")
-def ui_flats_add(request: Request, label: str = Form(...)):
+def ui_flats_add(
+    request: Request,
+    label: str = Form(...),
+    name: str = Form(""),
+):
     redir = require_ui_login(request)
     if redir:
         return redir
 
     db = SessionLocal()
     try:
-        flat = Flat(label=label.strip(), access_enabled=True)
+        flat = Flat(
+            label=label.strip(),
+            name=name.strip() or None,
+            access_enabled=True,
+        )
         db.add(flat)
         db.commit()
         return RedirectResponse(f"/admin-ui/flats/{flat.id}", status_code=303)
     finally:
         db.close()
 
-# --- edit page ---
+
+# ---------- edit flat (UI) ----------
+
 @app.get("/admin-ui/flats/{flat_id}", response_class=HTMLResponse)
 def ui_flat_edit(request: Request, flat_id: int):
     redir = require_ui_login(request)
@@ -158,10 +132,12 @@ def ui_flat_edit(request: Request, flat_id: int):
                 "request": request,
                 "flat": flat,
                 "has_pin": flat.pin_hash is not None,
+                "generated_pin": None,
             },
         )
     finally:
         db.close()
+
 
 @app.post("/admin-ui/flats/{flat_id}/set-label")
 def ui_flat_set_label(request: Request, flat_id: int, label: str = Form(...)):
@@ -180,6 +156,26 @@ def ui_flat_set_label(request: Request, flat_id: int, label: str = Form(...)):
         return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
         db.close()
+
+
+@app.post("/admin-ui/flats/{flat_id}/set-name")
+def ui_flat_set_name(request: Request, flat_id: int, name: str = Form("")):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        flat = db.get(Flat, flat_id)
+        if not flat:
+            raise HTTPException(status_code=404, detail="Flat not found")
+
+        flat.name = name.strip() or None
+        db.commit()
+        return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
+    finally:
+        db.close()
+
 
 @app.post("/admin-ui/flats/{flat_id}/toggle-access")
 def ui_flat_toggle_access(request: Request, flat_id: int):
@@ -200,6 +196,7 @@ def ui_flat_toggle_access(request: Request, flat_id: int):
     finally:
         db.close()
 
+
 @app.post("/admin-ui/flats/{flat_id}/set-pin")
 def ui_flat_set_pin(request: Request, flat_id: int, pin: str = Form(...)):
     redir = require_ui_login(request)
@@ -208,7 +205,6 @@ def ui_flat_set_pin(request: Request, flat_id: int, pin: str = Form(...)):
 
     pin = pin.strip()
     if len(pin) < 4 or len(pin) > 12 or not pin.isdigit():
-        # keep it simple: numeric pins only
         return RedirectResponse(f"/admin-ui/flats/{flat_id}?err=badpin", status_code=303)
 
     db = SessionLocal()
@@ -219,7 +215,7 @@ def ui_flat_set_pin(request: Request, flat_id: int, pin: str = Form(...)):
 
         new_hash = hash_pin(pin)
 
-        # forbid duplicate PINs across flats (simple policy)
+        # Simple policy: no duplicate PINs
         other = db.scalar(select(Flat).where(Flat.pin_hash == new_hash, Flat.id != flat_id))
         if other:
             return RedirectResponse(f"/admin-ui/flats/{flat_id}?err=dup", status_code=303)
@@ -230,6 +226,7 @@ def ui_flat_set_pin(request: Request, flat_id: int, pin: str = Form(...)):
         return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
         db.close()
+
 
 @app.post("/admin-ui/flats/{flat_id}/delete")
 def ui_flat_delete(request: Request, flat_id: int):
@@ -244,8 +241,48 @@ def ui_flat_delete(request: Request, flat_id: int):
             return RedirectResponse("/admin-ui/flats", status_code=303)
 
         db.delete(flat)
-        bump_version(db)  # removing a pin affects access lists
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/flats", status_code=303)
+    finally:
+        db.close()
+
+@app.post("/admin-ui/flats/{flat_id}/generate-pin", response_class=HTMLResponse)
+def ui_flat_generate_pin(request: Request, flat_id: int):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        flat = db.get(Flat, flat_id)
+        if not flat:
+            raise HTTPException(status_code=404, detail="Flat not found")
+
+        # generate unique pin
+        for _ in range(10):
+            pin = generate_numeric_pin(6)
+            pin_hash = hash_pin(pin)
+
+            other = db.scalar(select(Flat).where(Flat.pin_hash == pin_hash, Flat.id != flat_id))
+            if not other:
+                break
+        else:
+            raise HTTPException(status_code=500, detail="Could not generate a unique PIN")
+
+        flat.pin_hash = pin_hash
+        bump_version(db)
+        db.commit()
+
+        # show the generated pin once
+        return templates.TemplateResponse(
+            "flat_edit.html",
+            {
+                "request": request,
+                "flat": flat,
+                "has_pin": True,
+                "generated_pin": pin,
+            },
+        )
     finally:
         db.close()

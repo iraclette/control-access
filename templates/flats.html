@@ -38,6 +38,7 @@
       {% for f in flats %}
       <tr>
         <td><b>{{ f.label }}</b></td>
+        <td><b>{{ f.name }}</b></td>
         <td>
           {% if f.access_enabled %}
             <span class="badge"><span class="dot ok"></span>Enabled</span>

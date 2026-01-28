@@ -61,7 +61,7 @@ def patch_flat(flat_id: int, payload: FlatPatch, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(flat)
 
-    return FlatOut(id=flat.id, label=flat.label, access_enabled=flat.access_enabled, has_pin=flat.pin_hash is not None)
+    return FlatOut(id=flat.id, label=flat.label, name=flat.name, access_enabled=flat.access_enabled, has_pin=flat.pin_hash is not None)
 
 
 @router.put("/flats/{flat_id}/pin", dependencies=[Depends(require_admin)])
