@@ -12,3 +12,6 @@ __pycache__/
 # OS / editor
 .DS_Store
 .vscode/
+
+emulate_esp32.py
+pin_cache.json

@@ -1,7 +1,7 @@
 import datetime as dt
 import secrets
 
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, Header
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -284,5 +284,36 @@ def ui_flat_generate_pin(request: Request, flat_id: int):
                 "generated_pin": pin,
             },
         )
+    finally:
+        db.close()
+
+# ---------- emulate ESP32 ----------
+
+@app.get("/device/sync")
+def device_sync(x_device_secret: str | None = Header(default=None)):
+    # Optional: enforce a shared secret for now
+    # if x_device_secret != settings.DEVICE_SECRET:
+    #     raise HTTPException(status_code=401, detail="Bad device secret")
+
+    db = SessionLocal()
+    try:
+        st = db.get(SyncState, 1)
+        version = st.version if st else 0
+
+        flats = db.scalars(select(Flat)).all()
+
+        return {
+            "version": version,
+            "flats": [
+                {
+                    "id": f.id,
+                    "label": f.label,
+                    "pin_hash": f.pin_hash,
+                    "access_enabled": f.access_enabled,
+                }
+                for f in flats
+                if f.pin_hash is not None
+            ],
+        }
     finally:
         db.close()
