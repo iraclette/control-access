@@ -3,69 +3,38 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
+#include <Wiegand.h>
 #include "mbedtls/sha256.h"
 
-// ===================== CONFIG =====================
-static const char* WIFI_SSID     = "YOUR_WIFI";
-static const char* WIFI_PASSWORD = "YOUR_PASS";
-
-static const char* BASE_URL      = "http://127.0.0.1:8000"; // or http://192.168.x.x:8000 for LAN
-static const char* DEVICE_SECRET = "Developeri22_ip20061009";     // must match backend
-static const char* PIN_SALT      = "W7RJexc3HJwYB6NxVzJZ";        // must match backend
-
-// Wiegand pins from keypad
-static const int D0_PIN = 26;    // choose free GPIOs
+// ================= CONFIG =================
+static const int D0_PIN = 26;
 static const int D1_PIN = 27;
 
-// Relay pin (to IN on relay module)
 static const int RELAY_PIN = 25;
+static const bool RELAY_ACTIVE_HIGH = true;
 
-// Unlock pulse time
-static const uint32_t UNLOCK_MS = 1200;
+static const uint32_t UNLOCK_MS = 800;
 
-// Sync interval
-static const uint32_t SYNC_EVERY_MS = 30 * 1000; // 30s
+static const char* WIFI_SSID     = "Irakli";
+static const char* WIFI_PASSWORD = "ip20061009 me";
 
-// Wiegand: if no bits arrive for this time, consider message done
-static const uint32_t WIEGAND_GAP_MS = 30;
-// ===================================================
+// ⚠️ 127.0.0.1 ne marche pas sur ESP32: mets l'IP de ton serveur (PC) ou URL publique
+static const char* BASE_URL      = "http://192.168.56.1:8000";
+static const char* DEVICE_SECRET = "Developeri22_ip20061009";
+static const char* PIN_SALT      = "W7RJexc3HJwYB6NxVzJZ";
 
-// Cache stored in NVS under "cache"
+static const uint32_t SYNC_EVERY_MS = 30 * 1000;
+
+// Construction PIN (si le keypad envoie par touche)
+static const uint32_t PIN_TIMEOUT_MS = 8000; // reset si l'utilisateur attend trop
+static const uint8_t  PIN_MIN_LEN = 4;
+static const uint8_t  PIN_MAX_LEN = 12;
+// ==========================================
+
+WIEGAND wg;
 Preferences prefs;
 
-// ---------- Wiegand capture ----------
-volatile uint64_t wiegandBits = 0;
-volatile uint8_t wiegandBitCount = 0;
-volatile uint32_t lastPulseMs = 0;
-
-void IRAM_ATTR onD0() {
-  // D0 means 0 bit
-  wiegandBits <<= 1;
-  wiegandBitCount++;
-  lastPulseMs = millis();
-}
-void IRAM_ATTR onD1() {
-  // D1 means 1 bit
-  wiegandBits = (wiegandBits << 1) | 1ULL;
-  wiegandBitCount++;
-  lastPulseMs = millis();
-}
-
-bool readWiegand(uint64_t &bits, uint8_t &count) {
-  // If we have bits and gap elapsed -> message done
-  if (wiegandBitCount > 0 && (millis() - lastPulseMs) > WIEGAND_GAP_MS) {
-    noInterrupts();
-    bits = wiegandBits;
-    count = wiegandBitCount;
-    wiegandBits = 0;
-    wiegandBitCount = 0;
-    interrupts();
-    return true;
-  }
-  return false;
-}
-
-// ---------- SHA256 hex(pin + salt) ----------
+// ---------- SHA256 ----------
 String sha256Hex(const String &input) {
   uint8_t hash[32];
   mbedtls_sha256_context ctx;
@@ -78,7 +47,7 @@ String sha256Hex(const String &input) {
   static const char* hex = "0123456789abcdef";
   char out[65];
   for (int i = 0; i < 32; i++) {
-    out[i * 2] = hex[(hash[i] >> 4) & 0xF];
+    out[i * 2]     = hex[(hash[i] >> 4) & 0xF];
     out[i * 2 + 1] = hex[hash[i] & 0xF];
   }
   out[64] = 0;
@@ -86,36 +55,33 @@ String sha256Hex(const String &input) {
 }
 
 String hashPin(const String &pin) {
-  // Must match backend: sha256(PIN + SALT) or SALT+PIN depending on your backend.
-  // You said your working backend is PIN + SALT, so we do that:
+  // backend: sha256(pin + salt)
   return sha256Hex(pin + String(PIN_SALT));
 }
 
 // ---------- Relay ----------
-void unlockDoor() {
-  Serial.println("UNLOCK: relay pulse");
-  digitalWrite(RELAY_PIN, HIGH);     // adjust if your relay is active-low
-  delay(UNLOCK_MS);
-  digitalWrite(RELAY_PIN, LOW);
+void relaySet(bool on) {
+  if (RELAY_ACTIVE_HIGH) digitalWrite(RELAY_PIN, on ? HIGH : LOW);
+  else                   digitalWrite(RELAY_PIN, on ? LOW  : HIGH);
 }
 
-// ---------- Cache format ----------
-/*
-We store:
-- version (int)
-- json string of flats data, but simplified:
-  { "allowed": { "<pin_hash>": true/false, ... } }
-*/
+void unlockDoor() {
+  Serial.println("UNLOCK → relay pulse");
+  relaySet(true);
+  delay(UNLOCK_MS);
+  relaySet(false);
+}
+
+// ---------- Cache ----------
 bool isHashAllowed(const String &pinHash) {
   prefs.begin("cache", true);
   String json = prefs.getString("allowed_json", "");
   prefs.end();
 
-  if (json.length() == 0) return false;
+  if (json.isEmpty()) return false;
 
-  StaticJsonDocument<8192> doc;
-  DeserializationError err = deserializeJson(doc, json);
-  if (err) return false;
+  StaticJsonDocument<4096> doc;
+  if (deserializeJson(doc, json)) return false;
 
   JsonObject allowed = doc["allowed"].as<JsonObject>();
   if (!allowed.containsKey(pinHash)) return false;
@@ -123,41 +89,31 @@ bool isHashAllowed(const String &pinHash) {
 }
 
 void saveCacheFromSyncPayload(const String &payload) {
-  // payload is backend /device/sync JSON:
-  // { "version": N, "flats": [{label, pin_hash, access_enabled}, ...] }
-
   StaticJsonDocument<16384> doc;
-  DeserializationError err = deserializeJson(doc, payload);
-  if (err) {
-    Serial.print("JSON parse fail: ");
-    Serial.println(err.c_str());
+  if (deserializeJson(doc, payload)) {
+    Serial.println("Sync JSON parse failed");
     return;
   }
 
-  int version = doc["version"] | 0;
   JsonArray flats = doc["flats"].as<JsonArray>();
 
-  StaticJsonDocument<8192> out;
+  StaticJsonDocument<4096> out;
   JsonObject allowed = out.createNestedObject("allowed");
 
   for (JsonObject f : flats) {
     const char* ph = f["pin_hash"];
     bool enabled = f["access_enabled"] | false;
-    if (ph && strlen(ph) > 0) {
-      allowed[ph] = enabled;
-    }
+    if (ph && ph[0] != '\0') allowed[ph] = enabled;
   }
 
   String allowedJson;
   serializeJson(out, allowedJson);
 
   prefs.begin("cache", false);
-  prefs.putInt("version", version);
   prefs.putString("allowed_json", allowedJson);
   prefs.end();
 
-  Serial.print("Cache saved. Version=");
-  Serial.println(version);
+  Serial.println("Cache updated");
 }
 
 // ---------- Sync ----------
@@ -165,9 +121,7 @@ bool syncOnce() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   HTTPClient http;
-  String url = String(BASE_URL) + "/device/sync";
-
-  http.begin(url);
+  http.begin(String(BASE_URL) + "/device/sync");
   http.addHeader("X-Device-Secret", DEVICE_SECRET);
 
   int code = http.GET();
@@ -185,53 +139,69 @@ bool syncOnce() {
   return true;
 }
 
-// ---------- Turn Wiegand bits into a "PIN" string ----------
-/*
-Many Wiegand keypads send:
-- 4-bit keypresses (each digit), OR
-- a final multi-bit code representing the whole entered PIN, OR
-- card data format (26/34 bits), not for PIN.
+// ---------- PIN assembly ----------
+String currentPin = "";
+uint32_t lastKeyAtMs = 0;
 
-Without the keypad manual, we can’t know the exact encoding.
-So we start with a debug approach:
-- print bit count + bits
-- ALSO try interpreting as decimal number if bitcount <= 32
-- You then see what changes when you type digits.
-*/
-String decodeToPinGuess(uint64_t bits, uint8_t count) {
-  // Basic guess: treat as integer code
-  if (count <= 32) {
-    uint32_t v = (uint32_t)bits;
-    return String(v);
-  }
-  // fallback: return bits as hex string
-  char buf[20];
-  snprintf(buf, sizeof(buf), "%llx", (unsigned long long)bits);
-  return String(buf);
+void resetPinBuffer() {
+  if (!currentPin.isEmpty()) Serial.println("PIN buffer reset");
+  currentPin = "";
+  lastKeyAtMs = 0;
 }
 
-// ---------- Setup/Loop ----------
-uint32_t lastSyncAt = 0;
+// Map “key message” to a character.
+// This is keypad-dependent. Start with debug prints and adjust mapping.
+bool mapKeyToChar(unsigned long code, int bits, char &out) {
+  // Common mapping (NOT guaranteed):
+  // Some keypads send 4-bit codes: 0-9, 10='*', 11='#'
+  if (bits == 4 || bits == 8) {
+    if (code <= 9) { out = char('0' + code); return true; }
+    if (code == 10) { out = '*'; return true; }
+    if (code == 11) { out = '#'; return true; }
+  }
+  return false;
+}
+
+void handleFullPin(const String &pin) {
+  Serial.print("PIN final: ");
+  Serial.println(pin);
+
+  if (pin.length() < PIN_MIN_LEN || pin.length() > PIN_MAX_LEN) {
+    Serial.println("Bad PIN length");
+    return;
+  }
+  for (size_t i = 0; i < pin.length(); i++) {
+    if (!isDigit(pin[i])) {
+      Serial.println("PIN not numeric");
+      return;
+    }
+  }
+
+  String h = hashPin(pin);
+  if (isHashAllowed(h)) {
+    Serial.println("ACCESS GRANTED");
+    unlockDoor();
+  } else {
+    Serial.println("ACCESS DENIED");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   delay(200);
 
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);
+  relaySet(false);
 
-  pinMode(D0_PIN, INPUT_PULLUP);
-  pinMode(D1_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(D0_PIN), onD0, FALLING);
-  attachInterrupt(digitalPinToInterrupt(D1_PIN), onD1, FALLING);
+  wg.begin(D0_PIN, D1_PIN);
 
-  Serial.println("\nBooting...");
-
+  Serial.println("Booting...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   Serial.print("WiFi connecting");
-  for (int i = 0; i < 30 && WiFi.status() != WL_CONNECTED; i++) {
-    delay(300);
+  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) {
+    delay(250);
     Serial.print(".");
   }
   Serial.println();
@@ -240,53 +210,76 @@ void setup() {
     Serial.print("WiFi OK. IP=");
     Serial.println(WiFi.localIP());
     syncOnce();
-    lastSyncAt = millis();
   } else {
     Serial.println("WiFi not connected. Using cache only.");
   }
 }
 
+uint32_t lastSyncAtMs = 0;
+
 void loop() {
-  // periodic sync
-  if (WiFi.status() == WL_CONNECTED && (millis() - lastSyncAt) > SYNC_EVERY_MS) {
-    Serial.println("Sync...");
-    syncOnce();
-    lastSyncAt = millis();
+  // timeout PIN buffer
+  if (!currentPin.isEmpty() && (millis() - lastKeyAtMs) > PIN_TIMEOUT_MS) {
+    resetPinBuffer();
   }
 
-  // read wiegand message
-  uint64_t bits;
-  uint8_t count;
-  if (readWiegand(bits, count)) {
-    Serial.print("Wiegand received. bits=");
-    Serial.print((unsigned long long)bits);
-    Serial.print(" count=");
-    Serial.println(count);
+  // periodic sync
+  if (WiFi.status() == WL_CONNECTED && (millis() - lastSyncAtMs) > SYNC_EVERY_MS) {
+    Serial.println("Sync...");
+    syncOnce();
+    lastSyncAtMs = millis();
+  }
 
-    String pinGuess = decodeToPinGuess(bits, count);
-    Serial.print("PIN guess: ");
-    Serial.println(pinGuess);
+  // Wiegand read
+  if (wg.available()) {
+    unsigned long code = wg.getCode();
+    int bits = wg.getWiegandType();
 
-    // if it isn't digits, you're probably not getting raw PIN, just codes
-    bool allDigits = true;
-    for (size_t i = 0; i < pinGuess.length(); i++) {
-      if (!isDigit(pinGuess[i])) { allDigits = false; break; }
-    }
+    // DEBUG: always print raw
+    Serial.print("Wiegand msg: bits=");
+    Serial.print(bits);
+    Serial.print(" code=");
+    Serial.println(code);
 
-    if (!allDigits) {
-      Serial.println("Not numeric PIN guess. Need keypad encoding info or decode mapping.");
+    // Try interpret as keypress
+    char k;
+    if (mapKeyToChar(code, bits, k)) {
+      lastKeyAtMs = millis();
+
+      if (k == '#') {
+        // treat as ENTER
+        if (!currentPin.isEmpty()) handleFullPin(currentPin);
+        resetPinBuffer();
+        return;
+      }
+
+      if (k == '*') {
+        // clear
+        resetPinBuffer();
+        return;
+      }
+
+      // digit
+      if (currentPin.length() < PIN_MAX_LEN) {
+        currentPin += k;
+        Serial.print("PIN buffer: ");
+        Serial.println(currentPin);
+      } else {
+        Serial.println("PIN too long, resetting");
+        resetPinBuffer();
+      }
       return;
     }
 
-    String h = hashPin(pinGuess);
-    Serial.print("Computed pin_hash: ");
-    Serial.println(h);
-
-    if (isHashAllowed(h)) {
-      Serial.println("ACCESS GRANTED");
-      unlockDoor();
-    } else {
-      Serial.println("ACCESS DENIED");
+    // If not a keypress, maybe this keypad sends the full PIN as a single code.
+    // Heuristic: if bits <= 32, treat code as decimal string
+    if (bits <= 32) {
+      String pin = String(code);
+      handleFullPin(pin);
+      resetPinBuffer();
+      return;
     }
+
+    Serial.println("Unrecognized Wiegand format → need mapping from keypad manual/logs.");
   }
 }
