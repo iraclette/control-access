@@ -1,7 +1,7 @@
 import datetime as dt
 import secrets
 
-from fastapi import FastAPI, Request, Form, HTTPException, Header
+from fastapi import FastAPI, Request, Form, HTTPException, Header, APIRouter
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -14,6 +14,8 @@ from app.db.session import SessionLocal
 from app.models import Flat, SyncState
 
 app = FastAPI(title="Building Access API (v1)")
+router = APIRouter()
+DEVICE_SECRET = "Developeri22_ip20061009" 
 
 # Static + templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -317,3 +319,18 @@ def device_sync(x_device_secret: str | None = Header(default=None)):
         }
     finally:
         db.close()
+
+@router.post("/device/log")
+async def device_log(
+    request: Request,
+    x_device_secret: str = Header(None)
+):
+    if x_device_secret != DEVICE_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    body = await request.json()
+    msg = body.get("msg", "")
+
+    print(f"[ESP LOG] {msg}")
+
+    return {"ok": True}
