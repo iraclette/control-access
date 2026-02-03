@@ -16,6 +16,7 @@ from app.models import Flat, SyncState
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
 DEVICE_SECRET = "Developeri22_ip20061009" 
+app.include_router(router)
 
 # Static + templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
