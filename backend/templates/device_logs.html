@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Device logs</h2>
+
+<p>Showing {{ logs|length }} most recent entries.</p>
+
+<pre style="white-space: pre-wrap; background:#111; color:#eee; padding:12px; border-radius:8px;">
+{% for e in logs %}
+[{{ e.ts }}] ip={{ e.ip }}
+{{ e.payload | tojson }}
+------------------------------------------------------------
+{% endfor %}
+</pre>
+
+{% endblock %}

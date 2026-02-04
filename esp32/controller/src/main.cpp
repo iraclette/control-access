@@ -32,6 +32,23 @@ const unsigned long PIN_TIMEOUT_MS = 8000;
 void relayOn()  { digitalWrite(RELAY_PIN, RELAY_ACTIVE_HIGH ? HIGH : LOW); }
 void relayOff() { digitalWrite(RELAY_PIN, RELAY_ACTIVE_HIGH ? LOW  : HIGH); }
 
+void logRemote(const String& msg) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin(String(BASE_URL) + "/device/log");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Device-Secret", DEVICE_SECRET);
+
+  StaticJsonDocument<256> doc;
+  doc["msg"] = msg;
+
+  String body;
+  serializeJson(doc, body);
+  http.POST(body);
+  http.end();
+}
+
 // ---------- SHA256 ----------
 String sha256Hex(const String &input) {
   uint8_t hash[32];
@@ -78,25 +95,11 @@ bool syncOnce() {
   }
 
   Serial.println("✅ Sync OK");
+  logRemote("sync OK");
   return true;
 }
 
-void logRemote(const String& msg) {
-  if (WiFi.status() != WL_CONNECTED) return;
 
-  HTTPClient http;
-  http.begin(String(BASE_URL) + "/device/log");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Secret", DEVICE_SECRET);
-
-  StaticJsonDocument<256> doc;
-  doc["msg"] = msg;
-
-  String body;
-  serializeJson(doc, body);
-  http.POST(body);
-  http.end();
-}
 
 // ---------- Relay ----------
 void unlockDoor() {
@@ -128,9 +131,11 @@ void handlePin() {
 
   if (allowedPins.count(hash) && allowedPins[hash]) {
     Serial.println("✅ ACCESS GRANTED");
+    logRemote("ACCESS GRANTED");
     unlockDoor();
   } else {
     Serial.println("❌ ACCESS DENIED");
+    logRemote("ACCESS DENIED");
   }
 
   resetPin();
@@ -156,8 +161,13 @@ void setup() {
   Serial.println("\nWiFi connected");
   Serial.println(WiFi.localIP());
   Serial.println(">> BEFORE syncOnce()");
-  syncOnce();
+  
   Serial.println(">> AFTER syncOnce()");
+  logRemote("\nWiFi connected");
+  logRemote(String(WiFi.localIP()));
+  logRemote(">> BEFORE syncOnce()");
+  syncOnce();
+  logRemote(">> AFTER syncOnce()");
 }
 
 // ---------- Loop ----------
@@ -174,6 +184,8 @@ void loop() {
     Serial.print(bits);
     Serial.print(" code=");
     Serial.println(code);
+    logRemote("Wiegand bits=" + String(bits));
+
 
     // Standard keypad mapping
     if (bits == 4 || bits == 8) {
@@ -191,3 +203,7 @@ void loop() {
     }
   }
 }
+// void setup(){
+// pinMode(25, OUTPUT);
+// digitalWrite(25, LOW);}  // or HIGH depending on your board
+// void loop(){delay(1000);}
