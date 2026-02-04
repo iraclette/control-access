@@ -321,7 +321,7 @@ def device_sync(x_device_secret: str | None = Header(default=None)):
     finally:
         db.close()
 
-@router.post("/device/log")
+@router.post("/device_logs")
 async def device_log(
     request: Request,
     x_device_secret: str = Header(None)
