@@ -152,7 +152,7 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
     return false;
   }
 
-  http.addHeader("X-Device-Secret", DEVICE_SECRET); // optionnel si tu veux protéger
+  http.addHeader("X-Device-Secret", "Developeri22_ip20061009"); // optionnel si tu veux protéger
 
   int code = http.GET();
   if (code != 200) {
@@ -218,7 +218,7 @@ bool syncOnce() {
     Serial.println("Sync http.begin failed");
     return false;
   }
-  http.addHeader("X-Device-Secret", DEVICE_SECRET);
+  http.addHeader("X-Device-Secret", "Developeri22_ip20061009");
 
   int code = http.GET();
   if (code != 200) {
