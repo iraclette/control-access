@@ -12,10 +12,12 @@ from app.core.config import settings
 from app.core.security import hash_pin
 from app.db.session import SessionLocal
 from app.models import Flat, SyncState
+from app.api.routes import device
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
 DEVICE_SECRET = "Developeri22_ip20061009" 
+app.include_router(device)
 app.include_router(router)
 
 # Static + templates
@@ -291,35 +293,6 @@ def ui_flat_generate_pin(request: Request, flat_id: int):
         db.close()
 
 # ---------- emulate ESP32 ----------
-
-@app.get("/device/sync")
-def device_sync(x_device_secret: str | None = Header(default=None)):
-    # Optional: enforce a shared secret for now
-    # if x_device_secret != settings.DEVICE_SECRET:
-    #     raise HTTPException(status_code=401, detail="Bad device secret")
-
-    db = SessionLocal()
-    try:
-        st = db.get(SyncState, 1)
-        version = st.version if st else 0
-
-        flats = db.scalars(select(Flat)).all()
-
-        return {
-            "version": version,
-            "flats": [
-                {
-                    "id": f.id,
-                    "label": f.label,
-                    "pin_hash": f.pin_hash,
-                    "access_enabled": f.access_enabled,
-                }
-                for f in flats
-                if f.pin_hash is not None
-            ],
-        }
-    finally:
-        db.close()
 
 @router.post("/device_logs")
 async def device_log(
