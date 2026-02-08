@@ -10,7 +10,7 @@ class Device(Base):
 
     device_id: Mapped[str] = mapped_column(String, primary_key=True)
     secret: Mapped[str] = mapped_column(String, nullable=False)
-    unlock_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    unlock_ms: Mapped[Integer] = mapped_column(Integer, nullable=False)
 
     device_type: Mapped[str] = mapped_column(String, nullable=True)  # "door" / "elevator"
     fw_target_version: Mapped[str] = mapped_column(String, nullable=True)  # "1.0.3"
