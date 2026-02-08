@@ -12,12 +12,12 @@ from app.core.config import settings
 from app.core.security import hash_pin
 from app.db.session import SessionLocal
 from app.models import Flat, SyncState
-from app.api.routes import device
+from app.api.routes.device import router as device_router
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
 DEVICE_SECRET = "Developeri22_ip20061009" 
-app.include_router(device)
+app.include_router(device_router)
 app.include_router(router)
 
 # Static + templates
