@@ -11,8 +11,12 @@ class OTAMetadata(BaseModel):
     url: str
     sha256: Optional[str] = None  # optional but recommended
 
+class DeviceConfig(BaseModel):
+    unlock_ms: int
+
 class SyncSnapshot(BaseModel):
     version: int
     full: bool
     entries: List[SyncEntry]
     ota: Optional[OTAMetadata] = None
+    device: Optional[DeviceConfig] = None
