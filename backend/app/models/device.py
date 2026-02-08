@@ -1,5 +1,5 @@
 import datetime as dt
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, Integer, String, func, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -8,12 +8,12 @@ from .base import Base
 class Device(Base):
     __tablename__ = "devices"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    device_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    secret: Mapped[str] = mapped_column(String(128), nullable=False)  # for HMAC later
+    device_id: Mapped[str] = mapped_column(String, primary_key=True)
+    secret: Mapped[str] = mapped_column(String, nullable=False)
 
-    last_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    device_type: Mapped[str] = mapped_column(String, nullable=True)  # "door" / "elevator"
+    fw_target_version: Mapped[str] = mapped_column(String, nullable=True)  # "1.0.3"
+    fw_target_filename: Mapped[str] = mapped_column(String, nullable=True) # "door-v1.0.3.bin"
+    fw_target_sha256: Mapped[str] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
