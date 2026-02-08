@@ -248,11 +248,12 @@ bool syncOnce() {
   }
 
   // unlockMs optionnel si tu l'ajoutes côté backend
-  unlockMs = doc["device"]["unlock_ms"] | unlockMs;
+  unlockMs = doc["device"]["unlock_ms"] | unlockMs;  // fallback si absent
 
   Serial.print("✅ Sync OK. allowedPins=");
+ 
   Serial.println((int)allowedPins.size());
-
+ Serial.println(unlockMs);
   // OTA embedded in sync
   if (doc["ota"].is<JsonObject>()) {
     String targetVer = doc["ota"]["version"] | "";

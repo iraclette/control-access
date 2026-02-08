@@ -48,7 +48,7 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
         sha256=dev.fw_target_sha256)
 
     db.commit()
-    return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota)
+    return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota, device={"unlock_ms": dev.unlock_ms})
 
 @router.get("/firmware/{filename}")
 def firmware_download(filename: str):
