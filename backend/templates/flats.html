@@ -3,34 +3,34 @@
 
   <div class="grid two">
     <div class="card">
-      <h2 style="margin:0 0 8px;">Add flat</h2>
-      <p class="help" style="margin-top:0;">Create a new flat, then set its PIN on the edit page.</p>
+      <h2 style="margin:0 0 8px;">ბინის დამატება</h2>
+      <p class="help" style="margin-top:0;">შექმენი ახალი ბინა და დააყენე PIN კოდი</p>
       <form method="post" action="/admin-ui/flats/add" class="row">
-        <input class="input" name="label" placeholder="{City}-{number}" required style="max-width: 320px;">
-        <input class="input" name="name" placeholder="buyer's name" style="max-width: 320px;">
-        <button class="btn primary" type="submit">Add</button>
+        <input class="input" name="label" placeholder="{ობიექტი}-{ბინის ნომერი}" required style="max-width: 320px;">
+        <input class="input" name="name" placeholder="სახელი" style="max-width: 320px;">
+        <button class="btn primary" type="submit">დამატება</button>
       </form>
     </div>
 
     <div class="card">
-      <h2 style="margin:0 0 8px;">Summary</h2>
+      <h2 style="margin:0 0 8px;">შეჯამება</h2>
       <div class="kpi">
         <span class="badge"><span class="dot ok"></span>Enabled: {{ flats | selectattr("access_enabled") | list | length }}</span>
         <span class="badge"><span class="dot bad"></span>Disabled: {{ flats | rejectattr("access_enabled") | list | length }}</span>
         <span class="badge"><span class="dot warn"></span>PIN set: {{ flats | selectattr("pin_hash") | list | length }}</span>
       </div>
-      <p class="help">Tip: click “Edit” to set/replace PINs and change access.</p>
+      <p class="help">დააწექი "შეცვლა"-ს და შეასწორე წვდომა</p>
     </div>
   </div>
 
   <div class="card" style="margin-top:14px;">
-    <h2 style="margin:0 0 10px;">Flats</h2>
+    <h2 style="margin:0 0 10px;">ბინები</h2>
 
     <table class="table">
       <tr>
-        <th>Label</th>
-        <th>Name</th>
-        <th>Access</th>
+        <th>ნომერი</th>
+        <th>სახელი</th>
+        <th>წვდომა</th>
         <th>PIN</th>
         <th></th>
       </tr>
@@ -41,19 +41,19 @@
         <td><b>{{ f.name }}</b></td>
         <td>
           {% if f.access_enabled %}
-            <span class="badge"><span class="dot ok"></span>Enabled</span>
+            <span class="badge"><span class="dot ok"></span>დაშვებული</span>
           {% else %}
-            <span class="badge"><span class="dot bad"></span>Disabled</span>
+            <span class="badge"><span class="dot bad"></span>აკრძალული</span>
           {% endif %}
         </td>
         <td>
           {% if f.pin_hash %}
-            <span class="badge"><span class="dot ok"></span>Set</span>
+            <span class="badge"><span class="dot ok"></span>დაყენებული</span>
           {% else %}
-            <span class="badge"><span class="dot warn"></span>Not set</span>
+            <span class="badge"><span class="dot warn"></span>არაა დაყენებული</span>
           {% endif %}
         </td>
-        <td><a class="btn" href="/admin-ui/flats/{{ f.id }}">Edit</a></td>
+        <td><a class="btn" href="/admin-ui/flats/{{ f.id }}">შეცვლა</a></td>
       </tr>
       {% endfor %}
     </table>

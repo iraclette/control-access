@@ -16,8 +16,8 @@
 
 #define RELAY_ACTIVE_HIGH false
 
-const char* WIFI_SSID     = "Irakli";
-const char* WIFI_PASSWORD = "ip20061009 me";
+const char* WIFI_SSID     = "Developer 22";
+const char* WIFI_PASSWORD = "27272727";
 
 const char* BASE_URL      = "https://control-access.onrender.com";
 

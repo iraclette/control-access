@@ -1,59 +1,59 @@
 {% extends "base.html" %} {% block content %}
 
 <div class="row" style="margin-bottom: 12px">
-  <a class="btn" href="/admin-ui/flats">← Back</a>
-  <span class="badge">Flat <b>{{ flat.label }}</b></span>
+  <a class="btn" href="/admin-ui/flats">← უკან</a>
+  <span class="badge">ბინა <b>{{ flat.label }}</b></span>
 
   {% if flat.access_enabled %}
-  <span class="badge"><span class="dot ok"></span>Access enabled</span>
+  <span class="badge"><span class="dot ok"></span>წვდომა ჩართულია</span>
   {% else %}
-  <span class="badge"><span class="dot bad"></span>Access disabled</span>
+  <span class="badge"><span class="dot bad"></span>წვდომა გამორთულია</span>
   {% endif %} {% if flat.pin_hash %}
-  <span class="badge"><span class="dot ok"></span>PIN set</span>
+  <span class="badge"><span class="dot ok"></span>PIN დაყენებულია</span>
   {% else %}
-  <span class="badge"><span class="dot warn"></span>PIN not set</span>
+  <span class="badge"><span class="dot warn"></span>PIN არაა დაყენებული</span>
   {% endif %}
 </div>
 
 {% if request.query_params.get("err") == "dup" %}
 <div class="error" style="margin-bottom: 12px">
-  That PIN is already used by another flat.
+  სხვა ბინა იყეებს ამ PIN-ს
 </div>
 {% endif %} {% if request.query_params.get("err") == "badpin" %}
 <div class="error" style="margin-bottom: 12px">
-  PIN must be 4–12 digits (numbers only).
+  PIN უნდა იყოს 6 ციფრი.
 </div>
 {% endif %}
 
 <div class="grid two">
   <div class="card">
-    <h2 style="margin: 0 0 10px">Status</h2>
+    <h2 style="margin: 0 0 10px">სტატუსი</h2>
     <form method="post" action="/admin-ui/flats/{{ flat.id }}/toggle-access">
       {% if flat.access_enabled %}
-      <button class="btn danger" type="submit">Disable access</button>
-      <p class="help">Use this when rent is unpaid.</p>
+      <button class="btn danger" type="submit">წვდომის მოშორება</button>
+      <p class="help">მოაშორე თუ არ გადაიხადეს</p>
       {% else %}
-      <button class="btn ok" type="submit">Enable access</button>
-      <p class="help">Re-enable access after payment.</p>
+      <button class="btn ok" type="submit">წვდომის დამატება</button>
+      <p class="help">ჩართე გადახდის შემდეგ</p>
       {% endif %}
     </form>
   </div>
 
   <div class="card">
-    <h2 style="margin: 0 0 10px">Change label</h2>
+    <h2 style="margin: 0 0 10px">სახელის შეცვლა</h2>
     <form
       method="post"
       action="/admin-ui/flats/{{ flat.id }}/set-label"
       class="grid"
     >
       <input class="input" name="label" value="{{ flat.label }}" required />
-      <button class="btn primary" type="submit">Save</button>
+      <button class="btn primary" type="submit">შენახვა</button>
     </form>
-    <p class="help">Example: A-203, B-101, etc.</p>
+    <p class="help">მაგალითი: Gori-103, Varketili-101, etc.</p>
   </div>
 
   <div class="card">
-    <h2 style="margin: 0 0 10px">Set / Replace PIN</h2>
+    <h2 style="margin: 0 0 10px">დააყენე / შეცვალე PIN კოდი</h2>
     <form
       method="post"
       action="/admin-ui/flats/{{ flat.id }}/set-pin"
@@ -66,40 +66,40 @@
         placeholder="e.g. 483921"
         required
       />
-      <button class="btn primary" type="submit">Set PIN</button>
+      <button class="btn primary" type="submit">PIN კოდის დაყენება</button>
     </form>
     <form
       method="post"
       action="/admin-ui/flats/{{ flat.id }}/generate-pin"
       style="margin: 0"
     >
-      <button class="btn" type="submit">Generate PIN</button>
+      <button class="btn" type="submit">PIN კოდის გენერირება</button>
     </form>
-    <p class="help">PIN is stored as a hash (not visible).</p>
+    <p class="help">PIN კოდი დაკრიპტულია, ვერ დაინახავ</p>
   </div>
 
   {% if generated_pin %}
   <div class="card" style="margin-top: 12px">
     <div style="font-size: 14px; color: var(--muted)">
-      Generated PIN (copy now — it won’t be shown again):
+      გენერირებული PIN (შეინახე, ვეღარ დაინახავ):
     </div>
     <div style="font-size: 22px; letter-spacing: 2px; margin-top: 6px">
-      <b>{{ generated_pin }}</b>
+      <b>{{ გენერირებული კოდი}}</b>
     </div>
   </div>
   {% endif %}
 
   <div class="card">
-    <h2 style="margin: 0 0 10px">Danger zone</h2>
+    <h2 style="margin: 0 0 10px">სახიფათო</h2>
     <form
       method="post"
       action="/admin-ui/flats/{{ flat.id }}/delete"
-      onsubmit="return confirm('Delete this flat? This cannot be undone.');"
+      onsubmit="return confirm('ნამდვილად გინდა ბინის მოშორება? ვერ დააბრუნებ');"
     >
-      <button class="btn danger" type="submit">Delete flat</button>
+      <button class="btn danger" type="submit">ბინის წაშლა</button>
     </form>
     <p class="help">
-      Deleting a flat removes its PIN from access lists after sync.
+      ბინის წაშლა აშორებს ბინის PIN კოდს და მის წვდომას
     </p>
   </div>
 </div>

@@ -10,13 +10,13 @@
     <div class="container">
       <div class="topbar">
         <div class="brand">
-          <h1>Building Access Admin</h1>
-          <p>Manage flats, PINs, and access status.</p>
+          <h1>კარების კოდები</h1>
+          <p>მართვე ბინები, PIN-ები, და წვდომა.</p>
         </div>
         <div class="row">
           {% if request.session.get("is_admin") %}
           <form method="post" action="/admin-ui/logout">
-            <button class="btn ghost" type="submit">Logout</button>
+            <button class="btn ghost" type="submit">გამოსვლა</button>
           </form>
           {% endif %}
         </div>
