@@ -1,9 +1,8 @@
-import secrets
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models import Device, Building
 from app.schemas.firmware import DeviceOut, DeviceCreateIn, DeviceCreateOut, DevicePatchIn
@@ -25,10 +24,12 @@ def create_device(payload: DeviceCreateIn, db: Session = Depends(get_db)):
     if payload.building_id is not None and not db.get(Building, payload.building_id):
         raise HTTPException(status_code=404, detail="Building not found")
 
-    secret = secrets.token_hex(24)
+    # Firmware sends the shared DEVICE_SECRET (secrets.h) for /sync auth, not a
+    # per-device one -- true per-device secrets would need a provisioning step
+    # the firmware doesn't have, so this matches what's actually deployed.
     device = Device(
         device_id=payload.device_id,
-        secret=secret,
+        secret=settings.DEVICE_SECRET,
         unlock_ms=payload.unlock_ms,
         device_type=payload.device_type,
         building_id=payload.building_id,
@@ -37,7 +38,7 @@ def create_device(payload: DeviceCreateIn, db: Session = Depends(get_db)):
     db.add(device)
     db.commit()
 
-    return DeviceCreateOut(device_id=device.device_id, secret=secret)
+    return DeviceCreateOut(device_id=device.device_id, secret=device.secret)
 
 
 @router.get("", dependencies=[Depends(require_admin)], response_model=list[DeviceOut])
