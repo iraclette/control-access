@@ -15,3 +15,6 @@ __pycache__/
 
 emulate_esp32.py
 pin_cache.json
+
+# ESP32 device credentials (see secrets.h.example)
+secrets.h

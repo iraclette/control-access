@@ -9,6 +9,7 @@
 #include <WiFiClientSecure.h>
 #include <Preferences.h>
 #include "certs.h"
+#include "secrets.h"
 
 // ================= CONFIG =================
 #define D0_PIN 26
@@ -18,16 +19,16 @@
 
 #define RELAY_ACTIVE_HIGH false
 
-const char* WIFI_SSID     = "Developer 22";
-const char* WIFI_PASSWORD = "27272727";
+const char* WIFI_SSID     = SECRET_WIFI_SSID;
+const char* WIFI_PASSWORD = SECRET_WIFI_PASSWORD;
 
 const char* BASE_URL      = "https://control-access.onrender.com";
 
-// ATTENTION: ton backend check dev.secret (par device).
-// Donc soit tu mets le même secret partout, soit tu stockes un secret par device en DB.
-const char* DEVICE_SECRET = "Developeri22_ip20061009";
+// Shared across devices for now (per-device secrets already exist in the
+// devices table for /sync; this one gates /device_logs). Must match backend/.env.
+const char* DEVICE_SECRET = SECRET_DEVICE_SECRET;
 
-const char* PIN_SALT      = "W7RJexc3HJwYB6NxVzJZ";
+const char* PIN_SALT      = SECRET_PIN_SALT;
 
 // version firmware actuelle -- set via -DFW_VERSION in platformio.ini per env,
 // so bumping it is a build-config change instead of an easy-to-forget source edit.

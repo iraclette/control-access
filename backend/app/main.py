@@ -21,7 +21,6 @@ from app.api.routes import admin_router, buildings_router, devices_router, firmw
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
-DEVICE_SECRET = "Developeri22_ip20061009"
 app.include_router(device_router)
 app.include_router(admin_router)
 app.include_router(buildings_router)
@@ -528,7 +527,7 @@ async def device_log(
     request: Request,
     x_device_secret: str = Header(None)
 ):
-    if x_device_secret != DEVICE_SECRET:
+    if x_device_secret != settings.DEVICE_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     body = await request.json()
