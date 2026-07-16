@@ -8,6 +8,7 @@
 #include <Update.h>
 #include <WiFiClientSecure.h>
 #include <Preferences.h>
+#include <time.h>
 #include "certs.h"
 #include "secrets.h"
 
@@ -167,6 +168,25 @@ String getDeviceId() {
            (uint16_t)(chipid >> 32),
            (uint32_t)chipid);
   return String(id);
+}
+
+// ---------- Time sync ----------
+// WiFiClientSecure::setCACert() validates the server cert's date range against the
+// device's clock, which boots at ~1970 with no RTC -- without this, every TLS
+// connection fails cert verification before any HTTPS call can succeed.
+void syncTime() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Waiting for NTP time sync");
+  time_t now = time(nullptr);
+  uint32_t t0 = millis();
+  while (now < 8 * 3600 * 2 && millis() - t0 < 15000) {
+    delay(250);
+    Serial.print(".");
+    now = time(nullptr);
+  }
+  Serial.println();
+  Serial.print("Time synced: ");
+  Serial.println((long)now);
 }
 
 // ---------- OTA download ----------
@@ -357,12 +377,12 @@ bool syncOnce() {
   if (doc["ota"].is<JsonObject>()) {
     String targetVer = doc["ota"]["version"] | "";
     String binUrl    = doc["ota"]["url"] | "";
-    const char* sha  = doc["ota"]["sha256"] | nullptr;
+    String shaStr    = doc["ota"]["sha256"] | "";
 
     if (targetVer.length() > 0 && binUrl.length() > 0 && targetVer != CURRENT_FW_VERSION) {
       Serial.print("🧩 OTA available. target=");
       Serial.println(targetVer);
-      otaDownloadAndUpdate(binUrl, sha);
+      otaDownloadAndUpdate(binUrl, shaStr.length() > 0 ? shaStr.c_str() : nullptr);
     }
   }
 
@@ -441,6 +461,8 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("WiFi connected, IP=");
     Serial.println(WiFi.localIP());
+
+    syncTime();
 
     if (bootAttempt > BOOT_FAIL_THRESHOLD && lastGoodVersion.length() > 0 && lastGoodVersion != CURRENT_FW_VERSION) {
       // Rebooted repeatedly without ever completing a sync on this firmware -- likely a bad OTA.
