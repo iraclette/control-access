@@ -2,7 +2,6 @@ import datetime as dt
 import hashlib
 import hmac
 import secrets
-from pathlib import Path
 
 import semantic_version
 
@@ -28,8 +27,6 @@ app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(firmware_router)
 app.include_router(router)
-
-FIRMWARE_DIR = Path(__file__).resolve().parents[1] / "firmware"
 
 # Static + templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -450,10 +447,10 @@ async def ui_firmware_upload(
         sha256 = hashlib.sha256(content).hexdigest()
         filename = f"{device_type}-{version}.bin"
 
-        FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-        (FIRMWARE_DIR / filename).write_bytes(content)
-
-        db.add(FirmwareRelease(device_type=device_type, version=version, filename=filename, sha256=sha256, active=False))
+        db.add(FirmwareRelease(
+            device_type=device_type, version=version, filename=filename,
+            sha256=sha256, content=content, active=False,
+        ))
         db.commit()
         return RedirectResponse("/admin-ui/firmware", status_code=303)
     finally:

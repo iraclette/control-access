@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 
 import semantic_version
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -13,7 +12,6 @@ from .admin import require_admin
 
 router = APIRouter(prefix="/admin/firmware", tags=["admin-firmware"])
 
-FIRMWARE_DIR = Path(__file__).resolve().parents[3] / "firmware"
 DEVICE_TYPES = {"door", "elevator"}
 
 
@@ -47,14 +45,12 @@ async def upload_firmware(
     sha256 = hashlib.sha256(content).hexdigest()
     filename = f"{device_type}-{version}.bin"
 
-    FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
-    (FIRMWARE_DIR / filename).write_bytes(content)
-
     release = FirmwareRelease(
         device_type=device_type,
         version=version,
         filename=filename,
         sha256=sha256,
+        content=content,
         active=False,
     )
     db.add(release)

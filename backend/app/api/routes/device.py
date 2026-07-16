@@ -3,9 +3,7 @@ import hmac
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from fastapi.responses import FileResponse
-from pathlib import Path
-import hashlib
+from fastapi.responses import Response
 
 
 from app.core.config import settings
@@ -14,7 +12,6 @@ from app.models import Flat, SyncState, Device, FirmwareRelease
 from app.schemas.sync import SyncSnapshot, SyncEntry, OTAMetadata
 
 router = APIRouter(prefix="/device", tags=["device"])
-FIRMWARE_DIR = Path(__file__).resolve().parents[3] / "firmware"
 
 
 def require_device(db: Session, device_id: str, request: Request) -> Device:
@@ -73,7 +70,7 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
     return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota, device={"unlock_ms": dev.unlock_ms})
 
 @router.get("/firmware/{filename}")
-def firmware_download(filename: str, request: Request):
+def firmware_download(filename: str, request: Request, db: Session = Depends(get_db)):
     # Firmware binaries embed WIFI_PASSWORD/DEVICE_SECRET/PIN_SALT (baked in from
     # secrets.h at compile time) -- an unauthenticated download would let anyone
     # extract them from the .bin regardless of secrets.h being kept out of git.
@@ -81,16 +78,14 @@ def firmware_download(filename: str, request: Request):
     if not got or not hmac.compare_digest(got, settings.DEVICE_SECRET):
         raise HTTPException(status_code=401, detail="bad device secret")
 
-    # very basic path traversal protection
-    if "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="invalid filename")
-
-    fp = (FIRMWARE_DIR / filename).resolve()
-    if not fp.exists() or not fp.is_file() or FIRMWARE_DIR not in fp.parents:
+    # Served from the DB, not disk -- Render's filesystem is ephemeral and gets
+    # wiped on every redeploy, which used to silently orphan uploaded binaries.
+    release = db.scalar(select(FirmwareRelease).where(FirmwareRelease.filename == filename))
+    if not release or not release.content:
         raise HTTPException(status_code=404, detail="firmware not found")
 
-    return FileResponse(
-        path=str(fp),
+    return Response(
+        content=release.content,
         media_type="application/octet-stream",
-        filename=fp.name,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
