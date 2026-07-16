@@ -1,0 +1,77 @@
+name: Build and upload ESP32 firmware
+
+# Builds door + elevator firmware and uploads them as releases whenever esp32/
+# code changes. Upload only -- activation stays a manual step in the admin UI
+# (Firmware page), so a bad push can't roll out to live doors by itself.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "esp32/controller/**"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [door, elevator]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install -U platformio
+
+      - name: Write secrets.h
+        run: |
+          cat > esp32/controller/src/secrets.h <<EOF
+          #pragma once
+          #define SECRET_WIFI_SSID     "${{ secrets.ESP32_WIFI_SSID }}"
+          #define SECRET_WIFI_PASSWORD "${{ secrets.ESP32_WIFI_PASSWORD }}"
+          #define SECRET_DEVICE_SECRET "${{ secrets.ESP32_DEVICE_SECRET }}"
+          #define SECRET_PIN_SALT      "${{ secrets.ESP32_PIN_SALT }}"
+          EOF
+
+      - name: Build firmware
+        working-directory: esp32/controller
+        run: pio run -e ${{ matrix.env }}
+
+      - name: Read version from platformio.ini
+        id: meta
+        working-directory: esp32/controller
+        run: |
+          VERSION=$(sed -n "/\[env:${{ matrix.env }}\]/,/^\[/p" platformio.ini \
+            | grep -oE 'FW_VERSION=.\"[0-9]+\.[0-9]+\.[0-9]+' \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if [ -z "$VERSION" ]; then
+            echo "Could not find FW_VERSION for [env:${{ matrix.env }}]"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload firmware release
+        working-directory: esp32/controller
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            -H "X-Admin-Token: ${{ secrets.ADMIN_TOKEN }}" \
+            -F "device_type=${{ matrix.env }}" \
+            -F "version=${{ steps.meta.outputs.version }}" \
+            -F "file=@.pio/build/${{ matrix.env }}/firmware.bin" \
+            https://control-access.onrender.com/admin/firmware/upload)
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/resp.json
+          echo
+          if [ "$HTTP_CODE" = "409" ]; then
+            echo "::notice::${{ matrix.env }} ${{ steps.meta.outputs.version }} was already uploaded -- bump FW_VERSION in platformio.ini to release a new build."
+            exit 0
+          fi
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Upload failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "::notice::Uploaded ${{ matrix.env }} ${{ steps.meta.outputs.version }}. Activate it from the admin UI Firmware page when you're ready to roll it out."
