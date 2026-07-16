@@ -19,15 +19,32 @@
         <th>სახელი</th>
         <th>ბინები</th>
         <th>მოწყობილობები</th>
+        <th>PIN ლიფტზე</th>
+        <th></th>
       </tr>
       {% for b in buildings %}
       <tr>
         <td><b>{{ b.name }}</b></td>
         <td>{{ b.flat_count }}</td>
         <td>{{ b.device_count }}</td>
+        <td>
+          {% if b.elevator_pin_enabled %}
+          <span class="badge"><span class="dot ok"></span>ჩართული</span>
+          {% else %}
+          <span class="badge"><span class="dot bad"></span>გამორთული (მხოლოდ ბარათი)</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/admin-ui/buildings/{{ b.id }}/toggle-elevator-pin">
+            <button class="btn {{ 'danger' if b.elevator_pin_enabled else 'ok' }}" type="submit">
+              {{ 'გამორთვა ლიფტზე' if b.elevator_pin_enabled else 'ჩართვა ლიფტზე' }}
+            </button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </table>
+    <p class="help">გამორთვის შემდეგ ამ შენობის ლიფტები PIN კოდს აღარ მიიღებენ — საჭირო იქნება ბარათი. კარები ამაზე არ მოქმედებს.</p>
   </div>
 
 {% endblock %}

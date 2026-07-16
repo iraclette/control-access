@@ -353,7 +353,13 @@ def ui_buildings(request: Request):
         for b in buildings:
             flat_count = len(db.scalars(select(Flat).where(Flat.building_id == b.id)).all())
             device_count = len(db.scalars(select(Device).where(Device.building_id == b.id)).all())
-            rows.append({"name": b.name, "flat_count": flat_count, "device_count": device_count})
+            rows.append({
+                "id": b.id,
+                "name": b.name,
+                "flat_count": flat_count,
+                "device_count": device_count,
+                "elevator_pin_enabled": b.elevator_pin_enabled,
+            })
         return templates.TemplateResponse("buildings.html", {"request": request, "buildings": rows})
     finally:
         db.close()
@@ -373,6 +379,25 @@ def ui_buildings_add(request: Request, name: str = Form(...)):
             return RedirectResponse("/admin-ui/buildings?err=dup", status_code=303)
 
         db.add(Building(name=name))
+        db.commit()
+        return RedirectResponse("/admin-ui/buildings", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/buildings/{building_id}/toggle-elevator-pin")
+def ui_building_toggle_elevator_pin(request: Request, building_id: int):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        building = db.get(Building, building_id)
+        if not building:
+            raise HTTPException(status_code=404, detail="Building not found")
+
+        building.elevator_pin_enabled = not building.elevator_pin_enabled
         db.commit()
         return RedirectResponse("/admin-ui/buildings", status_code=303)
     finally:

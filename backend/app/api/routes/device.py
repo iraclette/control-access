@@ -8,7 +8,7 @@ from fastapi.responses import Response
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Flat, SyncState, Device, FirmwareRelease
+from app.models import Flat, SyncState, Device, FirmwareRelease, Building
 from app.schemas.sync import SyncSnapshot, SyncEntry, OTAMetadata
 
 router = APIRouter(prefix="/device", tags=["device"])
@@ -42,7 +42,16 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
 
     # A device with no building assigned gets no keys — fail closed rather than
     # leaking every building's PINs to an unassigned/misconfigured device.
-    if dev.building_id is None:
+    building = db.get(Building, dev.building_id) if dev.building_id is not None else None
+
+    # PINs are short/guessable/shareable -- once a building has RFID chips issued,
+    # elevator_pin_enabled can be flipped off so guessing/reusing someone else's PIN
+    # no longer grants elevator access, without touching door access or firmware.
+    pin_access_blocked = (
+        dev.device_type == "elevator" and building is not None and not building.elevator_pin_enabled
+    )
+
+    if building is None or pin_access_blocked:
         entries = []
     else:
         flats = db.scalars(
