@@ -40,6 +40,19 @@
   </div>
 
   <div class="card">
+    <h2 style="margin: 0 0 10px">შენობის მინიჭება</h2>
+    <form method="post" action="/admin-ui/flats/{{ flat.id }}/set-building" class="grid">
+      <select class="input" name="building_id">
+        <option value="">შენობის გარეშე</option>
+        {% for b in buildings %}
+        <option value="{{ b.id }}" {% if flat.building_id == b.id %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary" type="submit">შენახვა</button>
+    </form>
+  </div>
+
+  <div class="card">
     <h2 style="margin: 0 0 10px">სახელის შეცვლა</h2>
     <form
       method="post"

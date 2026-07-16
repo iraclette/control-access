@@ -7,6 +7,8 @@
 #include <map>
 #include <Update.h>
 #include <WiFiClientSecure.h>
+#include <Preferences.h>
+#include "certs.h"
 
 // ================= CONFIG =================
 #define D0_PIN 26
@@ -27,12 +29,21 @@ const char* DEVICE_SECRET = "Developeri22_ip20061009";
 
 const char* PIN_SALT      = "W7RJexc3HJwYB6NxVzJZ";
 
-// version firmware actuelle
-static const char* CURRENT_FW_VERSION = "1.0.0";
+// version firmware actuelle -- set via -DFW_VERSION in platformio.ini per env,
+// so bumping it is a build-config change instead of an easy-to-forget source edit.
+#ifndef FW_VERSION
+#define FW_VERSION "1.0.0"
+#endif
+static const char* CURRENT_FW_VERSION = FW_VERSION;
 
 // timing
 static const uint32_t PIN_TIMEOUT_MS = 8000;
 static const uint32_t SYNC_EVERY_MS  = 30 * 1000;
+
+// boot-loop detection: if we reboot this many times without a syncOnce() ever
+// completing on the currently running firmware, assume the last OTA was bad.
+static const uint32_t BOOT_FAIL_THRESHOLD = 3;
+Preferences prefs;
 // ============= LED_Patterns ================
 
 enum LedMode {
@@ -124,6 +135,29 @@ String sha256Hex(const String &input) {
   return String(out);
 }
 
+// ---------- Remote logging ----------
+void logRemote(const String &msg) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setCACert(ROOT_CA);
+
+  HTTPClient http;
+  String url = String(BASE_URL) + "/device_logs";
+  if (!http.begin(client, url)) return;
+
+  http.addHeader("X-Device-Secret", DEVICE_SECRET);
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<256> doc;
+  doc["msg"] = msg;
+  String body;
+  serializeJson(doc, body);
+
+  http.POST(body);
+  http.end();
+}
+
 // ---------- Device ID ----------
 String getDeviceId() {
   uint64_t chipid = ESP.getEfuseMac();
@@ -136,6 +170,13 @@ String getDeviceId() {
 
 // ---------- OTA download ----------
 bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be null */) {
+  // fail closed: never flash a binary we can't verify
+  if (!expectedSha256 || strlen(expectedSha256) != 64) {
+    Serial.println("OTA refused: missing/invalid sha256");
+    setLedMode(LED_OTA_FAIL);
+    return false;
+  }
+
   // build absolute URL if needed
   if (binUrl.startsWith("/")) binUrl = String(BASE_URL) + binUrl;
 
@@ -144,7 +185,7 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
   setLedMode(LED_OTA_DOWNLOADING);
 
   WiFiClientSecure client;
-  client.setInsecure(); // rapide; mieux: mettre le root CA
+  client.setCACert(ROOT_CA);
 
   HTTPClient http;
   if (!http.begin(client, binUrl)) {
@@ -152,7 +193,7 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
     return false;
   }
 
-  http.addHeader("X-Device-Secret", "Developeri22_ip20061009"); // optionnel si tu veux protéger
+  http.addHeader("X-Device-Secret", DEVICE_SECRET);
 
   int code = http.GET();
   if (code != 200) {
@@ -177,14 +218,73 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
     return false;
   }
 
-  size_t written = Update.writeStream(*stream);
-  if (written != (size_t)len) {
-    Serial.print("OTA written mismatch: ");
-    Serial.print(written);
-    Serial.print("/");
-    Serial.println(len);
+  // Stream manually (instead of Update.writeStream) so we can hash each chunk
+  // as it's written and verify integrity BEFORE Update.end() finalizes the flash.
+  mbedtls_sha256_context shaCtx;
+  mbedtls_sha256_init(&shaCtx);
+  mbedtls_sha256_starts_ret(&shaCtx, 0);
+
+  uint8_t buf[1024];
+  size_t written = 0;
+  uint32_t lastDataMs = millis();
+  bool streamError = false;
+
+  while (written < (size_t)len) {
+    size_t avail = stream->available();
+    if (avail == 0) {
+      if (!client.connected() || millis() - lastDataMs > 15000) {
+        Serial.println("OTA stream timeout/disconnected");
+        streamError = true;
+        break;
+      }
+      delay(10);
+      continue;
+    }
+
+    size_t toRead = avail > sizeof(buf) ? sizeof(buf) : avail;
+    int n = stream->read(buf, toRead);
+    if (n <= 0) continue;
+    lastDataMs = millis();
+
+    mbedtls_sha256_update_ret(&shaCtx, buf, n);
+    if (Update.write(buf, n) != (size_t)n) {
+      Serial.println("OTA flash write failed");
+      streamError = true;
+      break;
+    }
+    written += n;
+  }
+
+  http.end();
+
+  if (streamError || written != (size_t)len) {
+    Serial.println("OTA download incomplete");
     Update.abort();
-    http.end();
+    mbedtls_sha256_free(&shaCtx);
+    setLedMode(LED_OTA_FAIL);
+    return false;
+  }
+
+  uint8_t hash[32];
+  mbedtls_sha256_finish_ret(&shaCtx, hash);
+  mbedtls_sha256_free(&shaCtx);
+
+  const char* hex = "0123456789abcdef";
+  char gotHash[65];
+  for (int i = 0; i < 32; i++) {
+    gotHash[i * 2]     = hex[(hash[i] >> 4) & 0xF];
+    gotHash[i * 2 + 1] = hex[hash[i] & 0xF];
+  }
+  gotHash[64] = 0;
+
+  if (strcasecmp(gotHash, expectedSha256) != 0) {
+    Serial.print("OTA sha256 mismatch, expected=");
+    Serial.print(expectedSha256);
+    Serial.print(" got=");
+    Serial.println(gotHash);
+    Update.abort();
+    setLedMode(LED_OTA_FAIL);
+    logRemote("OTA REJECTED: sha256 mismatch for " + binUrl);
     return false;
   }
 
@@ -192,13 +292,10 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
     Serial.print("OTA Update.end failed: ");
     Serial.println(Update.errorString());
     setLedMode(LED_OTA_FAIL);
-    http.end();
     return false;
   }
 
-  http.end();
-
-  Serial.println("✅ OTA success, rebooting...");
+  Serial.println("OTA success (sha256 verified), rebooting...");
   setLedMode(LED_OTA_SUCCESS);
   delay(500);
   ESP.restart();
@@ -210,7 +307,7 @@ bool syncOnce() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   WiFiClientSecure client;
-  client.setInsecure();
+  client.setCACert(ROOT_CA);
 
   HTTPClient http;
   String url = String(BASE_URL) + "/device/" + deviceId + "/sync";
@@ -218,7 +315,8 @@ bool syncOnce() {
     Serial.println("Sync http.begin failed");
     return false;
   }
-  http.addHeader("X-Device-Secret", "Developeri22_ip20061009");
+  http.addHeader("X-Device-Secret", DEVICE_SECRET);
+  http.addHeader("X-Firmware-Version", CURRENT_FW_VERSION);
 
   int code = http.GET();
   if (code != 200) {
@@ -267,6 +365,13 @@ bool syncOnce() {
     }
   }
 
+  // This sync cycle completed fully on the currently running firmware -- mark it good,
+  // so a bad OTA doesn't get mistaken for a boot loop after a later, unrelated reset.
+  prefs.begin("ota", false);
+  prefs.putUInt("bootAttempt", 0);
+  prefs.putString("lastGood", CURRENT_FW_VERSION);
+  prefs.end();
+
   return true;
 }
 
@@ -305,6 +410,16 @@ void setup() {
   deviceId = getDeviceId();
   Serial.print("DEVICE_ID=");
   Serial.println(deviceId);
+  Serial.print("FW_VERSION=");
+  Serial.println(CURRENT_FW_VERSION);
+
+  prefs.begin("ota", false);
+  uint32_t bootAttempt = prefs.getUInt("bootAttempt", 0) + 1;
+  prefs.putUInt("bootAttempt", bootAttempt);
+  String lastGoodVersion = prefs.getString("lastGood", "");
+  prefs.end();
+  Serial.print("bootAttempt=");
+  Serial.println(bootAttempt);
 
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(LED, OUTPUT);
@@ -325,6 +440,17 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("WiFi connected, IP=");
     Serial.println(WiFi.localIP());
+
+    if (bootAttempt > BOOT_FAIL_THRESHOLD && lastGoodVersion.length() > 0 && lastGoodVersion != CURRENT_FW_VERSION) {
+      // Rebooted repeatedly without ever completing a sync on this firmware -- likely a bad OTA.
+      // We don't auto-reflash here (no verified source for the old binary on-device); this makes
+      // the failure visible so an admin can re-activate lastGoodVersion from the firmware page,
+      // which the normal OTA check below will then pick up and apply.
+      setLedMode(LED_OTA_FAIL);
+      logRemote("BOOT LOOP: fw=" + String(CURRENT_FW_VERSION) + " lastGood=" + lastGoodVersion +
+                " attempts=" + String(bootAttempt) + " -- re-activate lastGood in admin to recover");
+    }
+
     syncOnce();
     lastSyncMs = millis();
     setLedMode(LED_SYNC_OK); // or LED_SYNC_OK after sync

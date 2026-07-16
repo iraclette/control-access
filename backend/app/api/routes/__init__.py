@@ -1,4 +1,7 @@
 from .admin import router as admin_router
 from .device import router as device_router
+from .buildings import router as buildings_router
+from .devices import router as devices_router
+from .firmware import router as firmware_router
 
-__all__ = ["admin_router", "device_router"]
+__all__ = ["admin_router", "device_router", "buildings_router", "devices_router", "firmware_router"]

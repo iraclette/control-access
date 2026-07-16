@@ -3,5 +3,6 @@ from .flat import Flat
 from .device import Device
 from .sync_state import SyncState
 from .firmware import FirmwareRelease
+from .building import Building
 
-__all__ = ["Base", "Flat", "Device", "SyncState", "FirmwareRelease"]
+__all__ = ["Base", "Flat", "Device", "SyncState", "FirmwareRelease", "Building"]

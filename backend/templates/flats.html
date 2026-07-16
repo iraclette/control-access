@@ -8,6 +8,12 @@
       <form method="post" action="/admin-ui/flats/add" class="row">
         <input class="input" name="label" placeholder="{ობიექტი}-{ბინის ნომერი}" required style="max-width: 320px;">
         <input class="input" name="name" placeholder="სახელი" style="max-width: 320px;">
+        <select class="input" name="building_id" style="max-width: 220px;">
+          <option value="">შენობის გარეშე</option>
+          {% for b in buildings %}
+          <option value="{{ b.id }}">{{ b.name }}</option>
+          {% endfor %}
+        </select>
         <button class="btn primary" type="submit">დამატება</button>
       </form>
     </div>
@@ -26,10 +32,18 @@
   <div class="card" style="margin-top:14px;">
     <h2 style="margin:0 0 10px;">ბინები</h2>
 
+    <div class="row" style="margin-bottom:10px;">
+      <a class="btn {{ 'primary' if not selected_building_id else '' }}" href="/admin-ui/flats">ყველა</a>
+      {% for b in buildings %}
+      <a class="btn {{ 'primary' if selected_building_id == b.id else '' }}" href="/admin-ui/flats?building_id={{ b.id }}">{{ b.name }}</a>
+      {% endfor %}
+    </div>
+
     <table class="table">
       <tr>
         <th>ნომერი</th>
         <th>სახელი</th>
+        <th>შენობა</th>
         <th>წვდომა</th>
         <th>PIN</th>
         <th></th>
@@ -39,6 +53,13 @@
       <tr>
         <td><b>{{ f.label }}</b></td>
         <td><b>{{ f.name }}</b></td>
+        <td>
+          {% if f.building_id %}
+            {{ building_names.get(f.building_id, "?") }}
+          {% else %}
+            <span class="badge"><span class="dot warn"></span>არაა დაყენებული</span>
+          {% endif %}
+        </td>
         <td>
           {% if f.access_enabled %}
             <span class="badge"><span class="dot ok"></span>დაშვებული</span>

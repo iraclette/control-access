@@ -1,5 +1,5 @@
 import datetime as dt
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -11,6 +11,8 @@ class Flat(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     label: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(nullable=True)
+
+    building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"), nullable=True, index=True)
 
     # one PIN per flat
     pin_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)

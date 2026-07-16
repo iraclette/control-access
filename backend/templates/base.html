@@ -11,10 +11,13 @@
       <div class="topbar">
         <div class="brand">
           <h1>კარების კოდები</h1>
-          <p>მართვე ბინები, PIN-ები, და წვდომა.</p>
+          <p>მართვე ბინები, შენობები, PIN-ები, და firmware.</p>
         </div>
         <div class="row">
           {% if request.session.get("is_admin") %}
+          <a class="btn ghost" href="/admin-ui/flats">ბინები</a>
+          <a class="btn ghost" href="/admin-ui/buildings">შენობები</a>
+          <a class="btn ghost" href="/admin-ui/firmware">Firmware</a>
           <form method="post" action="/admin-ui/logout">
             <button class="btn ghost" type="submit">გამოსვლა</button>
           </form>

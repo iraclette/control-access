@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <div class="card">
+    <h2 style="margin:0 0 8px;">შენობის დამატება</h2>
+    <form method="post" action="/admin-ui/buildings/add" class="row">
+      <input class="input" name="name" placeholder="შენობის სახელი, მაგ: Gori" required style="max-width: 320px;">
+      <button class="btn primary" type="submit">დამატება</button>
+    </form>
+    {% if request.query_params.get("err") == "dup" %}
+    <div class="error" style="margin-top:10px;">ეს სახელი უკვე გამოიყენება</div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2 style="margin:0 0 10px;">შენობები</h2>
+    <table class="table">
+      <tr>
+        <th>სახელი</th>
+        <th>ბინები</th>
+        <th>მოწყობილობები</th>
+      </tr>
+      {% for b in buildings %}
+      <tr>
+        <td><b>{{ b.name }}</b></td>
+        <td>{{ b.flat_count }}</td>
+        <td>{{ b.device_count }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+{% endblock %}

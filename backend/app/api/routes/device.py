@@ -7,7 +7,7 @@ import hashlib
 
 
 from app.db.session import get_db
-from app.models import Flat, SyncState, Device
+from app.models import Flat, SyncState, Device, FirmwareRelease
 from app.schemas.sync import SyncSnapshot, SyncEntry, OTAMetadata
 
 router = APIRouter(prefix="/device", tags=["device"])
@@ -30,22 +30,41 @@ def require_device(db: Session, device_id: str, request: Request) -> Device:
 def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
     dev = require_device(db, device_id, request)
 
+    reported_version = request.headers.get("X-Firmware-Version")
+    if reported_version:
+        dev.fw_current_version = reported_version
+
     st = db.get(SyncState, 1)
     if st is None:
         st = SyncState(id=1, version=0)
         db.add(st)
         db.flush()
 
-    flats = db.scalars(select(Flat).where(Flat.pin_hash.is_not(None))).all()
-    entries = [SyncEntry(pin_hash=f.pin_hash, access_enabled=f.access_enabled) for f in flats]
+    # A device with no building assigned gets no keys — fail closed rather than
+    # leaking every building's PINs to an unassigned/misconfigured device.
+    if dev.building_id is None:
+        entries = []
+    else:
+        flats = db.scalars(
+            select(Flat).where(Flat.pin_hash.is_not(None), Flat.building_id == dev.building_id)
+        ).all()
+        entries = [SyncEntry(pin_hash=f.pin_hash, access_enabled=f.access_enabled) for f in flats]
 
     ota = None
-    if dev.fw_target_version and dev.fw_target_filename:
-        base = str(request.base_url).rstrip("/")
-        ota = OTAMetadata(
-        version=dev.fw_target_version,
-        url=f"{base}/device/firmware/{dev.fw_target_filename}",
-        sha256=dev.fw_target_sha256)
+    if dev.device_type:
+        release = db.scalar(
+            select(FirmwareRelease).where(
+                FirmwareRelease.device_type == dev.device_type,
+                FirmwareRelease.active.is_(True),
+            )
+        )
+        if release and release.version != dev.fw_current_version:
+            base = str(request.base_url).rstrip("/")
+            ota = OTAMetadata(
+                version=release.version,
+                url=f"{base}/device/firmware/{release.filename}",
+                sha256=release.sha256,
+            )
 
     db.commit()
     return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota, device={"unlock_ms": dev.unlock_ms})

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block content %}
+
+  <div class="grid two">
+    <div class="card">
+      <h2 style="margin:0 0 8px;">Firmware ატვირთვა</h2>
+      <form method="post" action="/admin-ui/firmware/upload" enctype="multipart/form-data" class="grid">
+        <select class="input" name="device_type" required>
+          <option value="door">door</option>
+          <option value="elevator">elevator</option>
+        </select>
+        <input class="input" name="version" placeholder="მაგ: 1.0.4" required>
+        <input class="input" type="file" name="file" accept=".bin" required>
+        <button class="btn primary" type="submit">ატვირთვა</button>
+      </form>
+      {% if request.query_params.get("err") %}
+      <div class="error" style="margin-top:10px;">{{ request.query_params.get("err") }}</div>
+      {% endif %}
+      <p class="help">ატვირთვა არ ააქტიურებს ავტომატურად — აქტიური ვერსია ცალკე ირჩევა.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 8px;">აქტიური ვერსიები</h2>
+      {% for dt, rel in active_by_type.items() %}
+      <div class="badge" style="margin-bottom:6px;">
+        <span class="dot {{ 'ok' if rel else 'warn' }}"></span>
+        {{ dt }}: {{ rel.version if rel else "არაა დაყენებული" }}
+      </div><br>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2 style="margin:0 0 10px;">Firmware-ის ისტორია</h2>
+    <table class="table">
+      <tr>
+        <th>ტიპი</th>
+        <th>ვერსია</th>
+        <th>sha256</th>
+        <th>სტატუსი</th>
+        <th></th>
+      </tr>
+      {% for r in releases %}
+      <tr>
+        <td>{{ r.device_type }}</td>
+        <td><b>{{ r.version }}</b></td>
+        <td style="font-size:11px; color: var(--muted);">{{ r.sha256[:16] }}…</td>
+        <td>
+          {% if r.active %}
+          <span class="badge"><span class="dot ok"></span>აქტიური</span>
+          {% else %}
+          <span class="badge"><span class="dot"></span>არააქტიური</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not r.active %}
+          <form method="post" action="/admin-ui/firmware/{{ r.id }}/activate">
+            <button class="btn ok" type="submit">გააქტიურება</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <h2 style="margin:0 0 10px;">მოწყობილობები</h2>
+    <table class="table">
+      <tr>
+        <th>device_id</th>
+        <th>ტიპი</th>
+        <th>შენობა</th>
+        <th>ამჟამინდელი ვერსია</th>
+        <th>სტატუსი</th>
+      </tr>
+      {% for d in devices %}
+      <tr>
+        <td><b>{{ d.device_id }}</b></td>
+        <td>
+          <form method="post" action="/admin-ui/devices/{{ d.device_id }}/set-type" class="row" style="gap:6px;">
+            <select class="input" name="device_type" onchange="this.form.submit()">
+              <option value="">—</option>
+              <option value="door" {% if d.device_type == "door" %}selected{% endif %}>door</option>
+              <option value="elevator" {% if d.device_type == "elevator" %}selected{% endif %}>elevator</option>
+            </select>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/admin-ui/devices/{{ d.device_id }}/set-building" class="row" style="gap:6px;">
+            <select class="input" name="building_id" onchange="this.form.submit()">
+              <option value="">—</option>
+              {% for b in buildings %}
+              <option value="{{ b.id }}" {% if d.building_id == b.id %}selected{% endif %}>{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
+        <td>{{ d.fw_current_version or "უცნობი" }}</td>
+        <td>
+          {% set target = active_by_type.get(d.device_type) %}
+          {% if not d.device_type %}
+          <span class="badge"><span class="dot warn"></span>ტიპი არაა დაყენებული</span>
+          {% elif not d.building_id %}
+          <span class="badge"><span class="dot warn"></span>შენობა არაა დაყენებული</span>
+          {% elif target and target.version != d.fw_current_version %}
+          <span class="badge"><span class="dot warn"></span>განახლება მოსალოდნელია</span>
+          {% else %}
+          <span class="badge"><span class="dot ok"></span>განახლებულია</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+{% endblock %}
