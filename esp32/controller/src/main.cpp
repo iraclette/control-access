@@ -370,9 +370,9 @@ bool syncOnce() {
   unlockMs = doc["device"]["unlock_ms"] | unlockMs;  // fallback si absent
 
   Serial.print("✅ Sync OK. allowedPins=");
- 
   Serial.println((int)allowedPins.size());
- Serial.println(unlockMs);
+  Serial.print("unlockMs=");
+  Serial.println(unlockMs);
   // OTA embedded in sync
   if (doc["ota"].is<JsonObject>()) {
     String targetVer = doc["ota"]["version"] | "";
@@ -484,6 +484,8 @@ void setup() {
 
 // ---------- Loop ----------
 void loop() {
+  ledTask();
+
   if (!pinBuffer.isEmpty() && millis() - lastKeyMs > PIN_TIMEOUT_MS) resetPin();
 
   if (WiFi.status() == WL_CONNECTED && millis() - lastSyncMs > SYNC_EVERY_MS) {

@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -6,6 +8,7 @@ from pathlib import Path
 import hashlib
 
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models import Flat, SyncState, Device, FirmwareRelease
 from app.schemas.sync import SyncSnapshot, SyncEntry, OTAMetadata
@@ -20,7 +23,7 @@ def require_device(db: Session, device_id: str, request: Request) -> Device:
         raise HTTPException(status_code=401, detail="unknown device")
 
     got = request.headers.get("X-Device-Secret")
-    if not got or got != dev.secret:
+    if not got or not hmac.compare_digest(got, dev.secret):
         raise HTTPException(status_code=401, detail="bad device secret")
 
     return dev
@@ -70,7 +73,14 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
     return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota, device={"unlock_ms": dev.unlock_ms})
 
 @router.get("/firmware/{filename}")
-def firmware_download(filename: str):
+def firmware_download(filename: str, request: Request):
+    # Firmware binaries embed WIFI_PASSWORD/DEVICE_SECRET/PIN_SALT (baked in from
+    # secrets.h at compile time) -- an unauthenticated download would let anyone
+    # extract them from the .bin regardless of secrets.h being kept out of git.
+    got = request.headers.get("X-Device-Secret")
+    if not got or not hmac.compare_digest(got, settings.DEVICE_SECRET):
+        raise HTTPException(status_code=401, detail="bad device secret")
+
     # very basic path traversal protection
     if "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="invalid filename")

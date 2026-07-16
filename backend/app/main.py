@@ -1,5 +1,6 @@
 import datetime as dt
 import hashlib
+import hmac
 import secrets
 from pathlib import Path
 
@@ -527,7 +528,7 @@ async def device_log(
     request: Request,
     x_device_secret: str = Header(None)
 ):
-    if x_device_secret != settings.DEVICE_SECRET:
+    if not x_device_secret or not hmac.compare_digest(x_device_secret, settings.DEVICE_SECRET):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     body = await request.json()

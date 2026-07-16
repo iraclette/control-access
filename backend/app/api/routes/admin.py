@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -12,7 +14,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)):
-    if x_admin_token != settings.ADMIN_TOKEN:
+    if not x_admin_token or not hmac.compare_digest(x_admin_token, settings.ADMIN_TOKEN):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
