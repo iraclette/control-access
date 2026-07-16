@@ -8,8 +8,9 @@
       <div class="error" style="margin: 10px 0;">{{ error }}</div>
     {% endif %}
 
-    <form method="post" action="/admin-ui/login" class="grid">
-      <input class="input" type="password" name="password" placeholder="პაროლი" required>
+    <form method="post" action="/admin-ui/login" class="grid" autocomplete="on">
+      <input type="text" name="username" value="admin" autocomplete="username" style="display:none" aria-hidden="true">
+      <input class="input" type="password" name="password" placeholder="პაროლი" autocomplete="current-password" required>
       <button class="btn primary" type="submit">შესვლა</button>
     </form>
   </div>

@@ -34,8 +34,8 @@ FIRMWARE_DIR = Path(__file__).resolve().parents[1] / "firmware"
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Session cookie for admin UI
-app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_TOKEN)
+# Session cookie for admin UI -- long-lived so you don't have to log in on every visit
+app.add_middleware(SessionMiddleware, secret_key=settings.ADMIN_TOKEN, max_age=60 * 60 * 24 * 180)
 
 
 # ---------- helpers ----------
