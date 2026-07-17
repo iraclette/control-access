@@ -22,3 +22,18 @@ class TagOut(BaseModel):
 class TagPatch(BaseModel):
     enabled: bool | None = None
     label: str | None = None
+
+
+class ScanIn(BaseModel):
+    hash: str = Field(min_length=64, max_length=64)
+
+
+class PendingScanOut(BaseModel):
+    id: int
+    hash: str
+    device_id: str | None
+    last_seen_at: dt.datetime
+    created_at: dt.datetime
+
+    class Config:
+        from_attributes = True

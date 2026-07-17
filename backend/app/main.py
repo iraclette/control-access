@@ -15,9 +15,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.core.config import settings
 from app.core.security import hash_pin
 from app.db.session import SessionLocal
-from app.models import Flat, SyncState, Building, Device, FirmwareRelease, RfidTag
+from app.models import Flat, SyncState, Building, Device, FirmwareRelease, RfidTag, PendingScan
 from app.api.routes.device import router as device_router
-from app.api.routes import admin_router, buildings_router, devices_router, firmware_router, tags_router
+from app.api.routes import admin_router, buildings_router, devices_router, firmware_router, tags_router, scans_router
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
@@ -27,6 +27,7 @@ app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(firmware_router)
 app.include_router(tags_router)
+app.include_router(scans_router)
 app.include_router(router)
 
 # Static + templates
@@ -606,6 +607,67 @@ def ui_device_set_building(request: Request, device_id: str, building_id: str = 
         device.building_id = int(building_id) if building_id else None
         db.commit()
         return RedirectResponse("/admin-ui/firmware", status_code=303)
+    finally:
+        db.close()
+
+
+# ---------- pending scans (UI) ----------
+
+@app.get("/admin-ui/scans", response_class=HTMLResponse)
+def ui_scans(request: Request):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        scans = db.scalars(select(PendingScan).order_by(PendingScan.last_seen_at.desc())).all()
+        flats = db.scalars(select(Flat).order_by(Flat.label.asc())).all()
+        return templates.TemplateResponse("scans.html", {"request": request, "scans": scans, "flats": flats})
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/scans/{scan_id}/assign")
+def ui_scan_assign(request: Request, scan_id: int, flat_id: int = Form(...), label: str = Form("")):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        scan = db.get(PendingScan, scan_id)
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        if not db.get(Flat, flat_id):
+            raise HTTPException(status_code=404, detail="Flat not found")
+
+        if db.scalar(select(RfidTag).where(RfidTag.hash == scan.hash)):
+            db.delete(scan)
+            db.commit()
+            return RedirectResponse("/admin-ui/scans?err=tagdup", status_code=303)
+
+        db.add(RfidTag(flat_id=flat_id, hash=scan.hash, label=label.strip() or None, enabled=True))
+        db.delete(scan)
+        db.commit()
+        return RedirectResponse("/admin-ui/scans", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/scans/{scan_id}/discard")
+def ui_scan_discard(request: Request, scan_id: int):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        scan = db.get(PendingScan, scan_id)
+        if scan:
+            db.delete(scan)
+            db.commit()
+        return RedirectResponse("/admin-ui/scans", status_code=303)
     finally:
         db.close()
 

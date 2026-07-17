@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.db.session import get_db
-from app.models import Flat, RfidTag
+from app.models import Flat, RfidTag, PendingScan
 from app.schemas.tag import TagCreate, TagOut, TagPatch
 from .admin import require_admin
 
@@ -21,6 +21,12 @@ def create_tag(flat_id: int, payload: TagCreate, db: Session = Depends(get_db)):
 
     tag = RfidTag(flat_id=flat_id, hash=payload.hash, label=payload.label, enabled=True)
     db.add(tag)
+
+    # Claiming a scan by assigning it clears it from the pending queue automatically.
+    pending = db.scalar(select(PendingScan).where(PendingScan.hash == payload.hash))
+    if pending:
+        db.delete(pending)
+
     db.commit()
     db.refresh(tag)
     return tag

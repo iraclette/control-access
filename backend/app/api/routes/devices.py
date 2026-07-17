@@ -10,7 +10,7 @@ from .admin import require_admin
 
 router = APIRouter(prefix="/admin/devices", tags=["admin-devices"])
 
-DEVICE_TYPES = {"door", "elevator"}
+DEVICE_TYPES = {"door", "elevator", "enroller"}
 
 
 @router.post("", dependencies=[Depends(require_admin)], response_model=DeviceCreateOut)

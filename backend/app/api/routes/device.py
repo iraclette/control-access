@@ -2,14 +2,15 @@ import hmac
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from fastapi.responses import Response
 
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Flat, SyncState, Device, FirmwareRelease, Building, RfidTag
+from app.models import Flat, SyncState, Device, FirmwareRelease, Building, RfidTag, PendingScan
 from app.schemas.sync import SyncSnapshot, SyncEntry, TagEntry, OTAMetadata
+from app.schemas.tag import ScanIn
 
 router = APIRouter(prefix="/device", tags=["device"])
 
@@ -94,6 +95,25 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
     return SyncSnapshot(
         version=st.version, full=True, entries=entries, tags=tags, ota=ota, device={"unlock_ms": dev.unlock_ms}
     )
+
+@router.post("/{device_id}/scan")
+def report_scan(device_id: str, payload: ScanIn, request: Request, db: Session = Depends(get_db)):
+    dev = require_device(db, device_id, request)
+
+    # Already assigned to a flat -- nothing pending to track.
+    if db.scalar(select(RfidTag).where(RfidTag.hash == payload.hash)):
+        return {"ok": True, "pending": False}
+
+    existing = db.scalar(select(PendingScan).where(PendingScan.hash == payload.hash))
+    if existing:
+        existing.device_id = dev.device_id
+        existing.last_seen_at = func.now()
+    else:
+        db.add(PendingScan(hash=payload.hash, device_id=dev.device_id))
+
+    db.commit()
+    return {"ok": True, "pending": True}
+
 
 @router.get("/firmware/{filename}")
 def firmware_download(filename: str, request: Request, db: Session = Depends(get_db)):
