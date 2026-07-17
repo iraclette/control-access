@@ -108,6 +108,16 @@ a:hover{text-decoration:underline}
   box-shadow: 0 0 0 3px rgba(110,168,254,.15);
 }
 
+/* The closed <select> box already picks up .input's background/color, but the
+   open dropdown list is rendered by the OS/browser and ignores inherited
+   transparency -- without this, options show up as light text on a default
+   white popup. Solid color here (not rgba) since there's no page backdrop
+   behind a native dropdown for transparency to blend with. */
+select.input option{
+  background: var(--card);
+  color: var(--text);
+}
+
 .btn{
   padding: 10px 12px;
   border-radius: 12px;
