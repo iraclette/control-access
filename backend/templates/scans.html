@@ -46,4 +46,14 @@
     {% endif %}
   </div>
 
+  <script>
+    // Auto-refresh so new scans show up without a manual reload -- skipped while
+    // a form field is focused, so it doesn't wipe an in-progress flat selection.
+    setInterval(() => {
+      const el = document.activeElement;
+      const busy = el && (el.tagName === "SELECT" || el.tagName === "INPUT");
+      if (!busy) location.reload();
+    }, 4000);
+  </script>
+
 {% endblock %}
