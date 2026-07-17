@@ -6,6 +6,10 @@ class SyncEntry(BaseModel):
     pin_hash: str
     access_enabled: bool
 
+class TagEntry(BaseModel):
+    hash: str
+    access_enabled: bool
+
 class OTAMetadata(BaseModel):
     version: str
     url: str
@@ -18,5 +22,6 @@ class SyncSnapshot(BaseModel):
     version: int
     full: bool
     entries: List[SyncEntry]
+    tags: List[TagEntry] = []
     ota: Optional[OTAMetadata] = None
     device: Optional[DeviceConfig] = None

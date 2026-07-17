@@ -15,9 +15,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.core.config import settings
 from app.core.security import hash_pin
 from app.db.session import SessionLocal
-from app.models import Flat, SyncState, Building, Device, FirmwareRelease
+from app.models import Flat, SyncState, Building, Device, FirmwareRelease, RfidTag
 from app.api.routes.device import router as device_router
-from app.api.routes import admin_router, buildings_router, devices_router, firmware_router
+from app.api.routes import admin_router, buildings_router, devices_router, firmware_router, tags_router
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
@@ -26,6 +26,7 @@ app.include_router(admin_router)
 app.include_router(buildings_router)
 app.include_router(devices_router)
 app.include_router(firmware_router)
+app.include_router(tags_router)
 app.include_router(router)
 
 # Static + templates
@@ -156,6 +157,7 @@ def ui_flat_edit(request: Request, flat_id: int):
             raise HTTPException(status_code=404, detail="Flat not found")
 
         buildings = db.scalars(select(Building).order_by(Building.name.asc())).all()
+        tags = db.scalars(select(RfidTag).where(RfidTag.flat_id == flat_id).order_by(RfidTag.created_at.asc())).all()
 
         return templates.TemplateResponse(
             "flat_edit.html",
@@ -163,10 +165,75 @@ def ui_flat_edit(request: Request, flat_id: int):
                 "request": request,
                 "flat": flat,
                 "buildings": buildings,
+                "tags": tags,
                 "has_pin": flat.pin_hash is not None,
                 "generated_pin": None,
             },
         )
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/flats/{flat_id}/tags/add")
+def ui_flat_tag_add(request: Request, flat_id: int, hash: str = Form(...), label: str = Form("")):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    tag_hash = hash.strip()
+    if len(tag_hash) != 64:
+        return RedirectResponse(f"/admin-ui/flats/{flat_id}?err=taghash", status_code=303)
+
+    db = SessionLocal()
+    try:
+        if not db.get(Flat, flat_id):
+            raise HTTPException(status_code=404, detail="Flat not found")
+
+        existing = db.scalar(select(RfidTag).where(RfidTag.hash == tag_hash))
+        if existing:
+            return RedirectResponse(f"/admin-ui/flats/{flat_id}?err=tagdup", status_code=303)
+
+        db.add(RfidTag(flat_id=flat_id, hash=tag_hash, label=label.strip() or None, enabled=True))
+        db.commit()
+        return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/flats/{flat_id}/tags/{tag_id}/toggle")
+def ui_flat_tag_toggle(request: Request, flat_id: int, tag_id: int):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        tag = db.get(RfidTag, tag_id)
+        if not tag or tag.flat_id != flat_id:
+            raise HTTPException(status_code=404, detail="Tag not found")
+
+        tag.enabled = not tag.enabled
+        db.commit()
+        return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/admin-ui/flats/{flat_id}/tags/{tag_id}/delete")
+def ui_flat_tag_delete(request: Request, flat_id: int, tag_id: int):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        tag = db.get(RfidTag, tag_id)
+        if not tag or tag.flat_id != flat_id:
+            raise HTTPException(status_code=404, detail="Tag not found")
+
+        db.delete(tag)
+        db.commit()
+        return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
         db.close()
 

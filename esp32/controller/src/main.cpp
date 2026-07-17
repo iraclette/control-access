@@ -31,6 +31,8 @@ const char* DEVICE_SECRET = SECRET_DEVICE_SECRET;
 
 const char* PIN_SALT      = SECRET_PIN_SALT;
 
+const char* TAG_SALT      = SECRET_TAG_SALT;
+
 // version firmware actuelle -- set via -DFW_VERSION in platformio.ini per env,
 // so bumping it is a build-config change instead of an easy-to-forget source edit.
 #ifndef FW_VERSION
@@ -95,9 +97,11 @@ void ledTask() {
 }
 
 std::map<String, bool> allowedPins;
+std::map<String, bool> allowedTags;
 
 WIEGAND wg;
 String pinBuffer = "";
+String tagBuffer = "";
 uint32_t lastKeyMs = 0;
 
 uint32_t unlockMs = 800;
@@ -110,11 +114,11 @@ void relayOn()  { digitalWrite(RELAY_PIN, RELAY_ACTIVE_HIGH ? HIGH : LOW); }
 void relayOff() { digitalWrite(RELAY_PIN, RELAY_ACTIVE_HIGH ? LOW  : HIGH); }
 
 void unlockDoor() {
-  Serial.println("🔓 UNLOCK");
+  Serial.println("UNLOCK");
   relayOn();
   delay(unlockMs);
   relayOff();
-  Serial.println("🔒 RELAY off");
+  Serial.println("RELAY off");
 }
 
 // ---------- SHA256 ----------
@@ -350,7 +354,7 @@ bool syncOnce() {
   String body = http.getString();
   http.end();
 
-  StaticJsonDocument<12288> doc;
+  StaticJsonDocument<32768> doc;
   auto err = deserializeJson(doc, body);
   if (err) {
     Serial.print("Sync JSON error: ");
@@ -366,11 +370,21 @@ bool syncOnce() {
     if (h && *h) allowedPins[String(h)] = en;
   }
 
+  // tags
+  allowedTags.clear();
+  for (JsonObject e : doc["tags"].as<JsonArray>()) {
+    const char* h = e["hash"];
+    bool en = e["access_enabled"] | false;
+    if (h && *h) allowedTags[String(h)] = en;
+  }
+
   // unlockMs optionnel si tu l'ajoutes côté backend
   unlockMs = doc["device"]["unlock_ms"] | unlockMs;  // fallback si absent
 
   Serial.print("✅ Sync OK. allowedPins=");
-  Serial.println((int)allowedPins.size());
+  Serial.print((int)allowedPins.size());
+  Serial.print(" allowedTags=");
+  Serial.println((int)allowedTags.size());
   Serial.print("unlockMs=");
   Serial.println(unlockMs);
   // OTA embedded in sync
@@ -414,13 +428,31 @@ void handlePin() {
   Serial.println(hash);
 
   if (allowedPins.count(hash) && allowedPins[hash]) {
-    Serial.println("✅ ACCESS GRANTED");
+    Serial.println("ACCESS GRANTED");
     unlockDoor();
   } else {
-    Serial.println("❌ ACCESS DENIED");
+    Serial.println("ACCESS DENIED");
   }
 
   resetPin();
+}
+
+// ---------- Tag handling ----------
+void resetTag() { tagBuffer = ""; }
+
+void handleTag(){
+  String hash = sha256Hex(String(TAG_SALT) + tagBuffer);
+  Serial.print("Hash: ");
+  Serial.println(hash);
+
+  if (allowedTags.count(hash) && allowedTags[hash]) {
+    Serial.println("ACCESS GRANTED");
+    unlockDoor();
+  } else {
+    Serial.println("ACCESS DENIED");
+  }  
+
+  resetTag();
 }
 
 // ---------- Setup ----------
@@ -514,6 +546,9 @@ void loop() {
       } else if (code == 13) { // enter (#)
         handlePin();
       }
+    } else if (bits == 26 || bits == 32) {
+      tagBuffer = String(code);
+      handleTag();
     }
   }
 }

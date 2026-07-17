@@ -8,8 +8,8 @@ from fastapi.responses import Response
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Flat, SyncState, Device, FirmwareRelease, Building
-from app.schemas.sync import SyncSnapshot, SyncEntry, OTAMetadata
+from app.models import Flat, SyncState, Device, FirmwareRelease, Building, RfidTag
+from app.schemas.sync import SyncSnapshot, SyncEntry, TagEntry, OTAMetadata
 
 router = APIRouter(prefix="/device", tags=["device"])
 
@@ -59,6 +59,21 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
         ).all()
         entries = [SyncEntry(pin_hash=f.pin_hash, access_enabled=f.access_enabled) for f in flats]
 
+    # Tags are deliberately not gated by elevator_pin_enabled -- that toggle only
+    # disables the guessable/shareable PIN, tags stay independent on every device.
+    if building is None:
+        tags = []
+    else:
+        tag_rows = db.execute(
+            select(RfidTag, Flat.access_enabled)
+            .join(Flat, RfidTag.flat_id == Flat.id)
+            .where(Flat.building_id == dev.building_id)
+        ).all()
+        tags = [
+            TagEntry(hash=tag.hash, access_enabled=tag.enabled and flat_enabled)
+            for tag, flat_enabled in tag_rows
+        ]
+
     ota = None
     if dev.device_type:
         release = db.scalar(
@@ -76,7 +91,9 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
             )
 
     db.commit()
-    return SyncSnapshot(version=st.version, full=True, entries=entries, ota=ota, device={"unlock_ms": dev.unlock_ms})
+    return SyncSnapshot(
+        version=st.version, full=True, entries=entries, tags=tags, ota=ota, device={"unlock_ms": dev.unlock_ms}
+    )
 
 @router.get("/firmware/{filename}")
 def firmware_download(filename: str, request: Request, db: Session = Depends(get_db)):

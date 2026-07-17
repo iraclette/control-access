@@ -117,4 +117,54 @@
   </div>
 </div>
 
+<div class="card" style="margin-top: 14px">
+  <h2 style="margin: 0 0 10px">RFID ბარათები</h2>
+
+  <table class="table">
+    <tr>
+      <th>სახელი</th>
+      <th>hash</th>
+      <th>სტატუსი</th>
+      <th></th>
+    </tr>
+    {% for t in tags %}
+    <tr>
+      <td>{{ t.label or "—" }}</td>
+      <td style="font-size: 11px; color: var(--muted)">{{ t.hash[:16] }}…</td>
+      <td>
+        {% if t.enabled %}
+        <span class="badge"><span class="dot ok"></span>ჩართული</span>
+        {% else %}
+        <span class="badge"><span class="dot bad"></span>გამორთული</span>
+        {% endif %}
+      </td>
+      <td class="row">
+        <form method="post" action="/admin-ui/flats/{{ flat.id }}/tags/{{ t.id }}/toggle">
+          <button class="btn {{ 'danger' if t.enabled else 'ok' }}" type="submit">
+            {{ 'გამორთვა' if t.enabled else 'ჩართვა' }}
+          </button>
+        </form>
+        <form method="post" action="/admin-ui/flats/{{ flat.id }}/tags/{{ t.id }}/delete"
+              onsubmit="return confirm('წაშალო ეს ბარათი?');">
+          <button class="btn danger" type="submit">წაშლა</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <form method="post" action="/admin-ui/flats/{{ flat.id }}/tags/add" class="row" style="margin-top: 12px">
+    <input class="input" name="hash" placeholder="tag hash (64 hex chars)" required style="max-width: 420px; font-family: monospace;">
+    <input class="input" name="label" placeholder="სახელი (არასავალდებულო)" style="max-width: 220px;">
+    <button class="btn primary" type="submit">ბარათის დამატება</button>
+  </form>
+  {% if request.query_params.get("err") == "tagdup" %}
+  <div class="error" style="margin-top: 10px">ეს ბარათი უკვე დარეგისტრირებულია</div>
+  {% endif %}
+  {% if request.query_params.get("err") == "taghash" %}
+  <div class="error" style="margin-top: 10px">hash უნდა იყოს ზუსტად 64 სიმბოლო</div>
+  {% endif %}
+  <p class="help">hash გამოითვლება მოწყობილობაზე (ტეგის კოდი + TAG_SALT) — ჯერჯერობით ხელით ჩასაწერია.</p>
+</div>
+
 {% endblock %}
