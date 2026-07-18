@@ -629,7 +629,7 @@ def ui_scans(request: Request):
 
 
 @app.post("/admin-ui/scans/{scan_id}/assign")
-def ui_scan_assign(request: Request, scan_id: int, flat_id: int = Form(...), label: str = Form("")):
+def ui_scan_assign(request: Request, scan_id: int, flat_label: str = Form(...), label: str = Form("")):
     redir = require_ui_login(request)
     if redir:
         return redir
@@ -639,15 +639,17 @@ def ui_scan_assign(request: Request, scan_id: int, flat_id: int = Form(...), lab
         scan = db.get(PendingScan, scan_id)
         if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
-        if not db.get(Flat, flat_id):
-            raise HTTPException(status_code=404, detail="Flat not found")
+
+        flat = db.scalar(select(Flat).where(Flat.label == flat_label.strip()))
+        if not flat:
+            return RedirectResponse("/admin-ui/scans?err=flatnotfound", status_code=303)
 
         if db.scalar(select(RfidTag).where(RfidTag.hash == scan.hash)):
             db.delete(scan)
             db.commit()
             return RedirectResponse("/admin-ui/scans?err=tagdup", status_code=303)
 
-        db.add(RfidTag(flat_id=flat_id, hash=scan.hash, label=label.strip() or None, enabled=True))
+        db.add(RfidTag(flat_id=flat.id, hash=scan.hash, label=label.strip() or None, enabled=True))
         db.delete(scan)
         db.commit()
         return RedirectResponse("/admin-ui/scans", status_code=303)

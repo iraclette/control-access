@@ -7,6 +7,15 @@
     {% if request.query_params.get("err") == "tagdup" %}
     <div class="error" style="margin-bottom: 10px">ეს ბარათი უკვე დარეგისტრირებულია სხვაგან</div>
     {% endif %}
+    {% if request.query_params.get("err") == "flatnotfound" %}
+    <div class="error" style="margin-bottom: 10px">ასეთი ბინა ვერ მოიძებნა — აირჩიე სიიდან</div>
+    {% endif %}
+
+    <datalist id="flatsList">
+      {% for f in flats %}
+      <option value="{{ f.label }}"></option>
+      {% endfor %}
+    </datalist>
 
     <table class="table">
       <tr>
@@ -23,12 +32,8 @@
         <td>{{ s.last_seen_at.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>
           <form method="post" action="/admin-ui/scans/{{ s.id }}/assign" class="row" style="gap:6px;">
-            <select class="input" name="flat_id" required style="max-width: 220px;">
-              <option value="">— აირჩიე ბინა —</option>
-              {% for f in flats %}
-              <option value="{{ f.id }}">{{ f.label }}</option>
-              {% endfor %}
-            </select>
+            <input class="input" name="flat_label" list="flatsList" placeholder="ბინის ძებნა..." required
+                   autocomplete="off" style="max-width: 220px;">
             <input class="input" name="label" placeholder="სახელი (არასავალდებულო)" style="max-width: 180px;">
             <button class="btn primary" type="submit">მინიჭება</button>
           </form>
