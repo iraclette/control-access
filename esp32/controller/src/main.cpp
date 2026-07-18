@@ -308,9 +308,16 @@ bool syncOnce() {
 
   // This sync cycle completed fully on the currently running firmware -- mark it good,
   // so a bad OTA doesn't get mistaken for a boot loop after a later, unrelated reset.
+  // Only actually write if something's changing: this runs every 30s, and writing
+  // unconditionally would needlessly widen the window for a power-loss-mid-write to
+  // corrupt flash. Reads are cheap/safe, so check first.
   prefs.begin("ota", false);
-  prefs.putUInt("bootAttempt", 0);
-  prefs.putString("lastGood", CURRENT_FW_VERSION);
+  uint32_t curAttempt = prefs.getUInt("bootAttempt", 0);
+  String curLastGood = prefs.getString("lastGood", "");
+  if (curAttempt != 0 || curLastGood != CURRENT_FW_VERSION) {
+    prefs.putUInt("bootAttempt", 0);
+    prefs.putString("lastGood", CURRENT_FW_VERSION);
+  }
   prefs.end();
 
   return true;
@@ -387,6 +394,10 @@ void setup() {
 
   wg.begin(D0_PIN, D1_PIN);
 
+  // We always pass credentials explicitly from secrets.h -- ESP32's own NVS
+  // credential caching buys us nothing and is one more thing that can get
+  // corrupted by a power loss mid-write, so skip it entirely.
+  WiFi.persistent(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("WiFi");
   uint32_t t0 = millis();

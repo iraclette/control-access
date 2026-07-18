@@ -81,6 +81,10 @@ void setup() {
 
   wg.begin(D0_PIN, D1_PIN);
 
+  // We always pass credentials explicitly from secrets.h -- ESP32's own NVS
+  // credential caching buys us nothing and is one more thing that can get
+  // corrupted by a power loss mid-write, so skip it entirely.
+  WiFi.persistent(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("WiFi");
   uint32_t t0 = millis();
