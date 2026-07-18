@@ -6,8 +6,7 @@
       <h2 style="margin:0 0 8px;">ბინის დამატება</h2>
       <p class="help" style="margin-top:0;">შექმენი ახალი ბინა და დააყენე PIN კოდი</p>
       <form method="post" action="/admin-ui/flats/add" class="row">
-        <input class="input" name="label" placeholder="{ობიექტი}-{ბინის ნომერი}" required style="max-width: 320px;">
-        <input class="input" name="name" placeholder="სახელი" style="max-width: 320px;">
+        <input class="input" name="label" placeholder="ბინის ნომერი" required style="max-width: 220px;">
         <select class="input" name="building_id" style="max-width: 220px;">
           <option value="">შენობის გარეშე</option>
           {% for b in buildings %}
@@ -24,6 +23,7 @@
         <span class="badge"><span class="dot ok"></span>Enabled: {{ flats | selectattr("access_enabled") | list | length }}</span>
         <span class="badge"><span class="dot bad"></span>Disabled: {{ flats | rejectattr("access_enabled") | list | length }}</span>
         <span class="badge"><span class="dot warn"></span>PIN set: {{ flats | selectattr("pin_hash") | list | length }}</span>
+        <span class="badge"><span class="dot ok"></span>ტეგები: {{ total_tags }}</span>
       </div>
       <p class="help">დააწექი "შეცვლა"-ს და შეასწორე წვდომა</p>
     </div>
@@ -42,17 +42,16 @@
     <table class="table">
       <tr>
         <th>ნომერი</th>
-        <th>სახელი</th>
         <th>შენობა</th>
         <th>წვდომა</th>
         <th>PIN</th>
+        <th>ტეგები</th>
         <th></th>
       </tr>
 
       {% for f in flats %}
       <tr>
         <td><b>{{ f.label }}</b></td>
-        <td><b>{{ f.name }}</b></td>
         <td>
           {% if f.building_id %}
             {{ building_names.get(f.building_id, "?") }}
@@ -73,6 +72,10 @@
           {% else %}
             <span class="badge"><span class="dot warn"></span>არაა დაყენებული</span>
           {% endif %}
+        </td>
+        <td>
+          {% set n = tag_counts.get(f.id, 0) %}
+          <span class="badge"><span class="dot {{ 'ok' if n else 'warn' }}"></span>{{ n }}</span>
         </td>
         <td><a class="btn" href="/admin-ui/flats/{{ f.id }}">შეცვლა</a></td>
       </tr>

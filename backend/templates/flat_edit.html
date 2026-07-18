@@ -53,7 +53,7 @@
   </div>
 
   <div class="card">
-    <h2 style="margin: 0 0 10px">სახელის შეცვლა</h2>
+    <h2 style="margin: 0 0 10px">ბინის ნომრის შეცვლა</h2>
     <form
       method="post"
       action="/admin-ui/flats/{{ flat.id }}/set-label"
@@ -62,7 +62,7 @@
       <input class="input" name="label" value="{{ flat.label }}" required />
       <button class="btn primary" type="submit">შენახვა</button>
     </form>
-    <p class="help">მაგალითი: Gori-103, Varketili-101, etc.</p>
+    <p class="help">მაგალითი: 001, 103, etc. — შენობა ცალკე აირჩევა ზემოთ.</p>
   </div>
 
   <div class="card">
@@ -118,7 +118,7 @@
 </div>
 
 <div class="card" style="margin-top: 14px">
-  <h2 style="margin: 0 0 10px">RFID ბარათები</h2>
+  <h2 style="margin: 0 0 10px">RFID ბარათები ({{ tags | length }})</h2>
 
   <table class="table">
     <tr>

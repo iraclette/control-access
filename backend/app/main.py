@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, Form, HTTPException, Header, APIRouter, Up
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import select, func
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
@@ -103,6 +103,10 @@ def ui_flats(request: Request, building_id: int | None = None):
         flats = db.scalars(query).all()
         buildings = db.scalars(select(Building).order_by(Building.name.asc())).all()
         building_names = {b.id: b.name for b in buildings}
+
+        tag_count_rows = db.execute(select(RfidTag.flat_id, func.count()).group_by(RfidTag.flat_id)).all()
+        tag_counts = {flat_id: count for flat_id, count in tag_count_rows}
+
         return templates.TemplateResponse(
             "flats.html",
             {
@@ -110,6 +114,8 @@ def ui_flats(request: Request, building_id: int | None = None):
                 "flats": flats,
                 "buildings": buildings,
                 "building_names": building_names,
+                "tag_counts": tag_counts,
+                "total_tags": sum(tag_counts.values()),
                 "selected_building_id": building_id,
             },
         )
@@ -121,7 +127,6 @@ def ui_flats(request: Request, building_id: int | None = None):
 def ui_flats_add(
     request: Request,
     label: str = Form(...),
-    name: str = Form(""),
     building_id: str = Form(""),
 ):
     redir = require_ui_login(request)
@@ -132,7 +137,6 @@ def ui_flats_add(
     try:
         flat = Flat(
             label=label.strip(),
-            name=name.strip() or None,
             building_id=int(building_id) if building_id else None,
             access_enabled=True,
         )
