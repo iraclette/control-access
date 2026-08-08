@@ -2,14 +2,16 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <Wiegand.h>
 #include <WiFiClientSecure.h>
 #include "certs.h"
 #include "secrets.h"
 
 // ================= CONFIG =================
-#define D0_PIN 26
-#define D1_PIN 27
+// RDM6300 is UART-only (9600 8N1), TX-only -- only its TX needs to reach an ESP32
+// RX-capable pin. RDM_TX_PIN is unused (nothing wired to it) but HardwareSerial
+// still wants a pin number, so it's set to an otherwise-unused GPIO.
+#define RDM_RX_PIN 16
+#define RDM_TX_PIN 17
 #define LED 2
 
 const char* WIFI_SSID     = SECRET_WIFI_SSID;
@@ -26,8 +28,63 @@ const char* TAG_SALT      = SECRET_TAG_SALT;
 // it, and reports it. It can't unlock anything, so a stray tap here can't
 // affect real access, unlike tapping an unrecognized card on a live door unit.
 
-WIEGAND wg;
+HardwareSerial rdmSerial(2);
 String deviceId;
+
+// ---------- RDM6300 ----------
+// Frame: 0x02 (STX) + 10 ASCII hex chars (5-byte tag ID) + 2 ASCII hex chars
+// (checksum: XOR of the 5 ID bytes) + 0x03 (ETX). 14 bytes total, 9600 8N1.
+// NOTE: this is the tag's raw ID, a different encoding than the 26-bit Wiegand
+// value a door/elevator reader produces for the same physical card -- verify
+// they actually match (tap the same tag on both, compare logged codes) before
+// trusting an RDM6300-enrolled tag to work at a Wiegand door.
+bool readRdmTag(String &outCode) {
+  static uint8_t buf[14];
+  static uint8_t idx = 0;
+
+  while (rdmSerial.available()) {
+    uint8_t b = rdmSerial.read();
+
+    if (b == 0x02) { // STX -- start of a new frame, always resync here
+      idx = 0;
+      buf[idx++] = b;
+      continue;
+    }
+
+    if (idx == 0) continue; // haven't seen STX yet, ignore stray bytes
+    if (idx < sizeof(buf)) buf[idx++] = b;
+
+    if (b == 0x03 && idx == 14) { // ETX at the expected position -- complete frame
+      idx = 0;
+
+      char hexId[11];
+      memcpy(hexId, buf + 1, 10);
+      hexId[10] = 0;
+
+      char hexChecksum[3];
+      memcpy(hexChecksum, buf + 11, 2);
+      hexChecksum[2] = 0;
+
+      uint8_t computed = 0;
+      for (int i = 0; i < 10; i += 2) {
+        char pair[3] = { hexId[i], hexId[i + 1], 0 };
+        computed ^= (uint8_t)strtoul(pair, nullptr, 16);
+      }
+      uint8_t received = (uint8_t)strtoul(hexChecksum, nullptr, 16);
+      if (computed != received) {
+        Serial.println("RDM6300: checksum mismatch, ignoring read");
+        return false;
+      }
+
+      outCode = String(hexId); // 10 hex chars identifying the tag
+      return true;
+    }
+
+    if (idx >= sizeof(buf)) idx = 0; // malformed/overlong frame, resync on next STX
+  }
+
+  return false;
+}
 
 // ---------- Report a scan ----------
 void reportScan(const String &hash) {
@@ -79,7 +136,7 @@ void setup() {
   pinMode(LED, OUTPUT);
   setLedMode(LED_WIFI_CONNECTING);
 
-  wg.begin(D0_PIN, D1_PIN);
+  rdmSerial.begin(9600, SERIAL_8N1, RDM_RX_PIN, RDM_TX_PIN);
 
   // We always pass credentials explicitly from secrets.h -- ESP32's own NVS
   // credential caching buys us nothing and is one more thing that can get
@@ -109,23 +166,17 @@ void setup() {
 void loop() {
   ledTask();
 
-  if (wg.available()) {
-    unsigned long code = wg.getCode();
-    int bits = wg.getWiegandType();
+  String tagCode;
+  if (readRdmTag(tagCode)) {
+    Serial.print("RDM6300 tag=");
+    Serial.println(tagCode);
 
-    Serial.print("Wiegand bits=");
-    Serial.print(bits);
-    Serial.print(" code=");
-    Serial.println(code);
-
-    if (bits == 26 || bits == 32) {
-      if (WiFi.status() == WL_CONNECTED) {
-        String hash = sha256Hex(String(TAG_SALT) + String(code));
-        reportScan(hash);
-      } else {
-        Serial.println("No WiFi, cannot report scan");
-        setLedMode(LED_OTA_FAIL);
-      }
+    if (WiFi.status() == WL_CONNECTED) {
+      String hash = sha256Hex(String(TAG_SALT) + tagCode);
+      reportScan(hash);
+    } else {
+      Serial.println("No WiFi, cannot report scan");
+      setLedMode(LED_OTA_FAIL);
     }
   }
 }
