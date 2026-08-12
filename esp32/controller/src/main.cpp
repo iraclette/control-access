@@ -429,6 +429,7 @@ void setup() {
   } else {
     Serial.println("WiFi not connected (offline mode)");
   }
+  
 }
 
 // ---------- Loop ----------

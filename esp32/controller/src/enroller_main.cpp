@@ -45,6 +45,12 @@ bool readRdmTag(String &outCode) {
   while (rdmSerial.available()) {
     uint8_t b = rdmSerial.read();
 
+    // Raw byte trace -- shows up regardless of whether it ever forms a valid
+    // frame, so "nothing prints on a tap" and "garbled data" look different.
+    if (b < 0x10) Serial.print("0");
+    Serial.print(b, HEX);
+    Serial.print(" ");
+
     if (b == 0x02) { // STX -- start of a new frame, always resync here
       idx = 0;
       buf[idx++] = b;
