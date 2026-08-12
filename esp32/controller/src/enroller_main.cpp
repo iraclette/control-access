@@ -34,10 +34,16 @@ String deviceId;
 // ---------- RDM6300 ----------
 // Frame: 0x02 (STX) + 10 ASCII hex chars (5-byte tag ID) + 2 ASCII hex chars
 // (checksum: XOR of the 5 ID bytes) + 0x03 (ETX). 14 bytes total, 9600 8N1.
-// NOTE: this is the tag's raw ID, a different encoding than the 26-bit Wiegand
-// value a door/elevator reader produces for the same physical card -- verify
-// they actually match (tap the same tag on both, compare logged codes) before
-// trusting an RDM6300-enrolled tag to work at a Wiegand door.
+//
+// The raw 5-byte ID is NOT what a Wiegand door/elevator reader computes for the
+// same physical tag -- confirmed empirically (tapped the same tag on both,
+// compared logged codes). What matched was the last 3 bytes (bytes 2-4) read as
+// a big-endian 24-bit integer, which lines up with why: standard 26-bit Wiegand
+// (H10301) is 1 parity + 8-bit facility code + 16-bit card number + 1 parity =
+// exactly 24 real data bits = 3 bytes, and that's what the reader chip extracts
+// from the tag, discarding the first 2 bytes entirely. So we derive and hash
+// that same 3-byte value here instead of the raw 10-char ID, to actually match
+// what door/elevator units will compute when the tag is tapped there.
 bool readRdmTag(String &outCode) {
   static uint8_t buf[14];
   static uint8_t idx = 0;
@@ -82,7 +88,13 @@ bool readRdmTag(String &outCode) {
         return false;
       }
 
-      outCode = String(hexId); // 10 hex chars identifying the tag
+      Serial.print("RDM6300 raw ID=");
+      Serial.println(hexId);
+
+      // Wiegand-equivalent: last 3 bytes (last 6 hex chars) as a 24-bit big-endian
+      // integer -- see the comment above this function for why.
+      unsigned long wiegandEquivalent = strtoul(hexId + 4, nullptr, 16);
+      outCode = String(wiegandEquivalent);
       return true;
     }
 
@@ -174,7 +186,7 @@ void loop() {
 
   String tagCode;
   if (readRdmTag(tagCode)) {
-    Serial.print("RDM6300 tag=");
+    Serial.print("Wiegand-equivalent code=");
     Serial.println(tagCode);
 
     if (WiFi.status() == WL_CONNECTED) {
