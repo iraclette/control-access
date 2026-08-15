@@ -29,6 +29,17 @@ def bump_version(db: Session) -> int:
     return st.version
 
 
+@router.post("/force-refresh", dependencies=[Depends(require_admin)])
+def force_refresh(db: Session = Depends(get_db)):
+    # Devices poll a lightweight version endpoint frequently and only do a full,
+    # expensive sync when that counter changes -- bumping it with no other data
+    # change is exactly how you make every device pick up whatever you just did
+    # within moments, without waiting for the long routine sync interval.
+    new_version = bump_version(db)
+    db.commit()
+    return {"ok": True, "version": new_version}
+
+
 @router.post("/flats", dependencies=[Depends(require_admin)], response_model=FlatOut)
 def create_flat(payload: FlatCreate, db: Session = Depends(get_db)):
     existing = db.scalar(select(Flat).where(Flat.label == payload.label))

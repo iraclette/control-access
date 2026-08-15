@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models import Flat, RfidTag, PendingScan
 from app.schemas.tag import TagCreate, TagOut, TagPatch
-from .admin import require_admin
+from .admin import require_admin, bump_version
 
 router = APIRouter(prefix="/admin/flats/{flat_id}/tags", tags=["admin-tags"])
 
@@ -27,6 +27,7 @@ def create_tag(flat_id: int, payload: TagCreate, db: Session = Depends(get_db)):
     if pending:
         db.delete(pending)
 
+    bump_version(db)
     db.commit()
     db.refresh(tag)
     return tag
@@ -51,6 +52,7 @@ def patch_tag(flat_id: int, tag_id: int, payload: TagPatch, db: Session = Depend
     if payload.label is not None:
         tag.label = payload.label
 
+    bump_version(db)
     db.commit()
     db.refresh(tag)
     return tag
@@ -63,5 +65,6 @@ def delete_tag(flat_id: int, tag_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Tag not found")
 
     db.delete(tag)
+    bump_version(db)
     db.commit()
     return {"ok": True}

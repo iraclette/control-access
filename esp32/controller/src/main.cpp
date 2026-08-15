@@ -44,7 +44,12 @@ static const char* CURRENT_FW_VERSION = FW_VERSION;
 
 // timing
 static const uint32_t PIN_TIMEOUT_MS = 8000;
-static const uint32_t SYNC_EVERY_MS  = 30 * 1000;
+// Full sync (fetches every pin/tag -- the expensive part) runs on this long interval.
+// Actual responsiveness comes from VERSION_CHECK_EVERY_MS below: a full sync also
+// runs immediately whenever that cheap check notices the backend's version counter
+// changed (any admin edit, or an explicit "force refresh" click, bumps it).
+static const uint32_t SYNC_EVERY_MS          = 5UL * 60 * 60 * 1000;  // 5 hours
+static const uint32_t VERSION_CHECK_EVERY_MS = 2UL * 60 * 1000;       // 2 minutes
 
 // boot-loop detection: if we reboot this many times without a syncOnce() ever
 // completing on the currently running firmware, assume the last OTA was bad.
@@ -61,6 +66,8 @@ uint32_t lastKeyMs = 0;
 
 uint32_t unlockMs = 800;
 uint32_t lastSyncMs = 0;
+uint32_t lastVersionCheckMs = 0;
+long lastKnownVersion = -1;  // -1 = unknown yet, forces a sync on the first real check
 
 String deviceId;
 
@@ -287,6 +294,10 @@ bool syncOnce() {
   // unlockMs optionnel si tu l'ajoutes côté backend
   unlockMs = doc["device"]["unlock_ms"] | unlockMs;  // fallback si absent
 
+  // Remember the version this sync reflects, so the lightweight check-in knows
+  // it's already up to date and doesn't trigger a redundant full sync.
+  lastKnownVersion = doc["version"] | lastKnownVersion;
+
   Serial.print("✅ Sync OK. allowedPins=");
   Serial.print((int)allowedPins.size());
   Serial.print(" allowedTags=");
@@ -321,6 +332,56 @@ bool syncOnce() {
   prefs.end();
 
   return true;
+}
+
+// ---------- Lightweight version check ----------
+// Cheap check-in (no flat/tag data, just a counter) so we can poll often without
+// the cost of a full sync every time. Triggers an immediate full syncOnce() the
+// moment the backend's version counter differs from what we last synced --
+// covers both routine admin edits and an explicit "force refresh" click.
+void checkVersionAndMaybeSync() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setCACert(ROOT_CA);
+
+  HTTPClient http;
+  String url = String(BASE_URL) + "/device/" + deviceId + "/version";
+  if (!http.begin(client, url)) {
+    Serial.println("Version check http.begin failed");
+    return;
+  }
+  http.addHeader("X-Device-Secret", DEVICE_SECRET);
+
+  int code = http.GET();
+  if (code != 200) {
+    Serial.print("Version check HTTP ");
+    Serial.println(code);
+    http.end();
+    return;
+  }
+
+  String body = http.getString();
+  http.end();
+
+  StaticJsonDocument<128> doc;
+  auto err = deserializeJson(doc, body);
+  if (err) {
+    Serial.print("Version check JSON error: ");
+    Serial.println(err.c_str());
+    return;
+  }
+
+  long serverVersion = doc["version"] | -1;
+  if (serverVersion != lastKnownVersion) {
+    Serial.print("Version changed (");
+    Serial.print(lastKnownVersion);
+    Serial.print(" -> ");
+    Serial.print(serverVersion);
+    Serial.println("), doing a full sync");
+    syncOnce();
+    lastSyncMs = millis();
+  }
 }
 
 // ---------- PIN handling ----------
@@ -425,11 +486,12 @@ void setup() {
 
     syncOnce();
     lastSyncMs = millis();
+    lastVersionCheckMs = millis();
     setLedMode(LED_SYNC_OK); // or LED_SYNC_OK after sync
   } else {
     Serial.println("WiFi not connected (offline mode)");
   }
-  
+
 }
 
 // ---------- Loop ----------
@@ -441,6 +503,10 @@ void loop() {
   if (WiFi.status() == WL_CONNECTED && millis() - lastSyncMs > SYNC_EVERY_MS) {
     syncOnce();
     lastSyncMs = millis();
+    lastVersionCheckMs = millis();
+  } else if (WiFi.status() == WL_CONNECTED && millis() - lastVersionCheckMs > VERSION_CHECK_EVERY_MS) {
+    checkVersionAndMaybeSync();
+    lastVersionCheckMs = millis();
   }
 
   if (wg.available()) {

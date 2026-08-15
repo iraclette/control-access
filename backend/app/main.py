@@ -199,6 +199,7 @@ def ui_flat_tag_add(request: Request, flat_id: int, hash: str = Form(...), label
             return RedirectResponse(f"/admin-ui/flats/{flat_id}?err=tagdup", status_code=303)
 
         db.add(RfidTag(flat_id=flat_id, hash=tag_hash, label=label.strip() or None, enabled=True))
+        bump_version(db)
         db.commit()
         return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
@@ -218,6 +219,7 @@ def ui_flat_tag_toggle(request: Request, flat_id: int, tag_id: int):
             raise HTTPException(status_code=404, detail="Tag not found")
 
         tag.enabled = not tag.enabled
+        bump_version(db)
         db.commit()
         return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
@@ -237,6 +239,7 @@ def ui_flat_tag_delete(request: Request, flat_id: int, tag_id: int):
             raise HTTPException(status_code=404, detail="Tag not found")
 
         db.delete(tag)
+        bump_version(db)
         db.commit()
         return RedirectResponse(f"/admin-ui/flats/{flat_id}", status_code=303)
     finally:
@@ -470,6 +473,7 @@ def ui_building_toggle_elevator_pin(request: Request, building_id: int):
             raise HTTPException(status_code=404, detail="Building not found")
 
         building.elevator_pin_enabled = not building.elevator_pin_enabled
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/buildings", status_code=303)
     finally:
@@ -477,6 +481,21 @@ def ui_building_toggle_elevator_pin(request: Request, building_id: int):
 
 
 # ---------- firmware (UI) ----------
+
+@app.post("/admin-ui/force-refresh")
+def ui_force_refresh(request: Request):
+    redir = require_ui_login(request)
+    if redir:
+        return redir
+
+    db = SessionLocal()
+    try:
+        bump_version(db)
+        db.commit()
+        return RedirectResponse("/admin-ui/firmware?refreshed=1", status_code=303)
+    finally:
+        db.close()
+
 
 @app.get("/admin-ui/firmware", response_class=HTMLResponse)
 def ui_firmware(request: Request):
@@ -590,6 +609,7 @@ def ui_device_set_type(request: Request, device_id: str, device_type: str = Form
             raise HTTPException(status_code=404, detail="Device not found")
 
         device.device_type = device_type or None
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/firmware", status_code=303)
     finally:
@@ -609,6 +629,7 @@ def ui_device_set_building(request: Request, device_id: str, building_id: str = 
             raise HTTPException(status_code=404, detail="Device not found")
 
         device.building_id = int(building_id) if building_id else None
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/firmware", status_code=303)
     finally:
@@ -655,6 +676,7 @@ def ui_scan_assign(request: Request, scan_id: int, flat_label: str = Form(...), 
 
         db.add(RfidTag(flat_id=flat.id, hash=scan.hash, label=label.strip() or None, enabled=True))
         db.delete(scan)
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/scans", status_code=303)
     finally:

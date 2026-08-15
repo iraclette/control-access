@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models import Building
 from app.schemas.building import BuildingCreate, BuildingOut, BuildingPatch
-from .admin import require_admin
+from .admin import require_admin, bump_version
 
 router = APIRouter(prefix="/admin/buildings", tags=["admin-buildings"])
 
@@ -35,6 +35,7 @@ def patch_building(building_id: int, payload: BuildingPatch, db: Session = Depen
         raise HTTPException(status_code=404, detail="Building not found")
 
     building.elevator_pin_enabled = payload.elevator_pin_enabled
+    bump_version(db)
     db.commit()
     db.refresh(building)
     return building

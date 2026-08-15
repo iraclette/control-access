@@ -96,6 +96,17 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
         version=st.version, full=True, entries=entries, tags=tags, ota=ota, device={"unlock_ms": dev.unlock_ms}
     )
 
+@router.get("/{device_id}/version")
+def version_check(device_id: str, request: Request, db: Session = Depends(get_db)):
+    # Cheap check-in: just the counter, no flat/tag joins -- lets a device poll
+    # frequently for "did anything change" without the cost of a full /sync,
+    # so the expensive full sync can run on a long interval while still staying
+    # responsive to actual changes (or an admin-triggered force-refresh).
+    require_device(db, device_id, request)
+    st = db.get(SyncState, 1)
+    return {"version": st.version if st else 0}
+
+
 @router.post("/{device_id}/scan")
 def report_scan(device_id: str, payload: ScanIn, request: Request, db: Session = Depends(get_db)):
     dev = require_device(db, device_id, request)

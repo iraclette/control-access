@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models import Device, Building
 from app.schemas.firmware import DeviceOut, DeviceCreateIn, DeviceCreateOut, DevicePatchIn
-from .admin import require_admin
+from .admin import require_admin, bump_version
 
 router = APIRouter(prefix="/admin/devices", tags=["admin-devices"])
 
@@ -68,6 +68,7 @@ def patch_device(device_id: str, payload: DevicePatchIn, db: Session = Depends(g
     if payload.enabled is not None:
         device.enabled = payload.enabled
 
+    bump_version(db)
     db.commit()
     db.refresh(device)
     return device

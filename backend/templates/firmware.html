@@ -65,7 +65,15 @@
   </div>
 
   <div class="card" style="margin-top:14px;">
-    <h2 style="margin:0 0 10px;">მოწყობილობები</h2>
+    <div class="row" style="justify-content: space-between; margin-bottom: 10px;">
+      <h2 style="margin:0;">მოწყობილობები</h2>
+      <form method="post" action="/admin-ui/force-refresh">
+        <button class="btn primary" type="submit">ყველა მოწყობილობის განახლება ახლავე</button>
+      </form>
+    </div>
+    {% if request.query_params.get("refreshed") %}
+    <div class="badge" style="margin-bottom:10px;"><span class="dot ok"></span>მოწყობილობები განახლდებიან უახლოეს წუთებში</div>
+    {% endif %}
     <table class="table">
       <tr>
         <th>device_id</th>
@@ -83,6 +91,7 @@
               <option value="">—</option>
               <option value="door" {% if d.device_type == "door" %}selected{% endif %}>door</option>
               <option value="elevator" {% if d.device_type == "elevator" %}selected{% endif %}>elevator</option>
+              <option value="enroller" {% if d.device_type == "enroller" %}selected{% endif %}>enroller</option>
             </select>
           </form>
         </td>
