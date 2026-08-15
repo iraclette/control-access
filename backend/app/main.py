@@ -590,6 +590,7 @@ def ui_firmware_activate(request: Request, release_id: int):
             FirmwareRelease.id != release.id,
         ).update({"active": False})
         release.active = True
+        bump_version(db)
         db.commit()
         return RedirectResponse("/admin-ui/firmware", status_code=303)
     finally:

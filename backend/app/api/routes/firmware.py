@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.db.session import get_db
 from app.models import FirmwareRelease
 from app.schemas.firmware import FirmwareReleaseOut
-from .admin import require_admin
+from .admin import require_admin, bump_version
 
 router = APIRouter(prefix="/admin/firmware", tags=["admin-firmware"])
 
@@ -71,6 +71,7 @@ def activate_firmware(release_id: int, db: Session = Depends(get_db)):
     ).update({"active": False})
 
     release.active = True
+    bump_version(db)
     db.commit()
     db.refresh(release)
     return release
