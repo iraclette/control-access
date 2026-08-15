@@ -35,6 +35,7 @@ jobs:
           #define SECRET_WIFI_PASSWORD "${{ secrets.ESP32_WIFI_PASSWORD }}"
           #define SECRET_DEVICE_SECRET "${{ secrets.ESP32_DEVICE_SECRET }}"
           #define SECRET_PIN_SALT      "${{ secrets.ESP32_PIN_SALT }}"
+          #define SECRET_TAG_SALT      "${{ secrets.ESP32_TAG_SALT }}"
           EOF
 
       - name: Build firmware
