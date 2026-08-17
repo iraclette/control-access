@@ -4,9 +4,6 @@
   <div class="card">
     <h2 style="margin:0 0 10px;">ახალი დასკანერებული ბარათები</h2>
     <p class="help" style="margin-top:0;">დაარეგისტრირე ბარათი enroller მოწყობილობაზე შეხებით — გამოჩნდება აქ.</p>
-    {% if request.query_params.get("err") == "tagdup" %}
-    <div class="error" style="margin-bottom: 10px">ეს ბარათი უკვე დარეგისტრირებულია სხვაგან</div>
-    {% endif %}
     {% if request.query_params.get("err") == "flatnotfound" %}
     <div class="error" style="margin-bottom: 10px">ასეთი ბინა ვერ მოიძებნა — აირჩიე სიიდან</div>
     {% endif %}
@@ -26,16 +23,23 @@
         <th></th>
       </tr>
       {% for s in scans %}
+      {% set ex = existing_by_hash.get(s.hash) %}
       <tr>
         <td style="font-size: 11px; color: var(--muted)">{{ s.hash[:16] }}…</td>
         <td>{{ s.device_id or "—" }}</td>
         <td>{{ s.last_seen_at.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>
+          {% if ex %}
+          <div class="badge" style="margin-bottom:6px;">
+            <span class="dot ok"></span>
+            მინიჭებულია: {{ ex.flat_label }}{% if ex.tag.label %} ({{ ex.tag.label }}){% endif %}
+          </div>
+          {% endif %}
           <form method="post" action="/admin-ui/scans/{{ s.id }}/assign" class="row" style="gap:6px;">
             <input class="input" name="flat_label" list="flatsList" placeholder="ბინის ძებნა..." required
                    autocomplete="off" style="max-width: 220px;">
             <input class="input" name="label" placeholder="სახელი (არასავალდებულო)" style="max-width: 180px;">
-            <button class="btn primary" type="submit">მინიჭება</button>
+            <button class="btn primary" type="submit">{{ "შეცვლა" if ex else "მინიჭება" }}</button>
           </form>
         </td>
         <td>

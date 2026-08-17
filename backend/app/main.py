@@ -649,7 +649,21 @@ def ui_scans(request: Request):
     try:
         scans = db.scalars(select(PendingScan).order_by(PendingScan.last_seen_at.desc())).all()
         flats = db.scalars(select(Flat).order_by(Flat.label.asc())).all()
-        return templates.TemplateResponse("scans.html", {"request": request, "scans": scans, "flats": flats})
+
+        existing_by_hash = {}
+        hashes = [s.hash for s in scans]
+        if hashes:
+            rows = db.execute(
+                select(RfidTag, Flat.label)
+                .join(Flat, RfidTag.flat_id == Flat.id)
+                .where(RfidTag.hash.in_(hashes))
+            ).all()
+            existing_by_hash = {tag.hash: {"tag": tag, "flat_label": flat_label} for tag, flat_label in rows}
+
+        return templates.TemplateResponse(
+            "scans.html",
+            {"request": request, "scans": scans, "flats": flats, "existing_by_hash": existing_by_hash},
+        )
     finally:
         db.close()
 
@@ -670,12 +684,16 @@ def ui_scan_assign(request: Request, scan_id: int, flat_label: str = Form(...), 
         if not flat:
             return RedirectResponse("/admin-ui/scans?err=flatnotfound", status_code=303)
 
-        if db.scalar(select(RfidTag).where(RfidTag.hash == scan.hash)):
-            db.delete(scan)
-            db.commit()
-            return RedirectResponse("/admin-ui/scans?err=tagdup", status_code=303)
+        # Tapping an already-assigned tag and picking a different flat here is how
+        # an admin moves it, instead of only ever being able to claim brand-new taps.
+        existing = db.scalar(select(RfidTag).where(RfidTag.hash == scan.hash))
+        if existing:
+            existing.flat_id = flat.id
+            if label.strip():
+                existing.label = label.strip()
+        else:
+            db.add(RfidTag(flat_id=flat.id, hash=scan.hash, label=label.strip() or None, enabled=True))
 
-        db.add(RfidTag(flat_id=flat.id, hash=scan.hash, label=label.strip() or None, enabled=True))
         db.delete(scan)
         bump_version(db)
         db.commit()

@@ -111,9 +111,10 @@ def version_check(device_id: str, request: Request, db: Session = Depends(get_db
 def report_scan(device_id: str, payload: ScanIn, request: Request, db: Session = Depends(get_db)):
     dev = require_device(db, device_id, request)
 
-    # Already assigned to a flat -- nothing pending to track.
-    if db.scalar(select(RfidTag).where(RfidTag.hash == payload.hash)):
-        return {"ok": True, "pending": False}
+    # Upsert regardless of whether the tag is already assigned -- re-tapping an
+    # assigned tag is how an admin looks up (or changes) which flat it belongs
+    # to from the Scans page, not just for claiming brand-new taps.
+    already_assigned = db.scalar(select(RfidTag).where(RfidTag.hash == payload.hash)) is not None
 
     existing = db.scalar(select(PendingScan).where(PendingScan.hash == payload.hash))
     if existing:
@@ -123,7 +124,7 @@ def report_scan(device_id: str, payload: ScanIn, request: Request, db: Session =
         db.add(PendingScan(hash=payload.hash, device_id=dev.device_id))
 
     db.commit()
-    return {"ok": True, "pending": True}
+    return {"ok": True, "pending": not already_assigned}
 
 
 @router.get("/firmware/{filename}")
