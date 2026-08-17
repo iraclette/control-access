@@ -244,28 +244,35 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
 bool syncOnce() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  WiFiClientSecure client;
-  client.setCACert(ROOT_CA);
+  String body;
+  {
+    // Scoped so client/http (and their TLS buffers) are fully destructed before
+    // we get to the OTA download below -- otherwise this connection's SSL context
+    // is still holding memory when otaDownloadAndUpdate() opens a second one,
+    // which reliably fails allocation on the ESP32's fragmented heap.
+    WiFiClientSecure client;
+    client.setCACert(ROOT_CA);
 
-  HTTPClient http;
-  String url = String(BASE_URL) + "/device/" + deviceId + "/sync";
-  if (!http.begin(client, url)) {
-    Serial.println("Sync http.begin failed");
-    return false;
-  }
-  http.addHeader("X-Device-Secret", DEVICE_SECRET);
-  http.addHeader("X-Firmware-Version", CURRENT_FW_VERSION);
+    HTTPClient http;
+    String url = String(BASE_URL) + "/device/" + deviceId + "/sync";
+    if (!http.begin(client, url)) {
+      Serial.println("Sync http.begin failed");
+      return false;
+    }
+    http.addHeader("X-Device-Secret", DEVICE_SECRET);
+    http.addHeader("X-Firmware-Version", CURRENT_FW_VERSION);
 
-  int code = http.GET();
-  if (code != 200) {
-    Serial.print("Sync HTTP ");
-    Serial.println(code);
+    int code = http.GET();
+    if (code != 200) {
+      Serial.print("Sync HTTP ");
+      Serial.println(code);
+      http.end();
+      return false;
+    }
+
+    body = http.getString();
     http.end();
-    return false;
   }
-
-  String body = http.getString();
-  http.end();
 
   StaticJsonDocument<32768> doc;
   auto err = deserializeJson(doc, body);
