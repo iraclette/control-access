@@ -18,3 +18,10 @@ pin_cache.json
 
 # ESP32 device credentials (see secrets.h.example)
 secrets.h
+
+# graphify-generated knowledge graph (rebuildable, not source)
+graphify-out/
+
+CLAUDE.md
+.mcp.json
+.claude/

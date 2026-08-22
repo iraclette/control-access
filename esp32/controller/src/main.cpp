@@ -49,7 +49,7 @@ static const uint32_t PIN_TIMEOUT_MS = 8000;
 // runs immediately whenever that cheap check notices the backend's version counter
 // changed (any admin edit, or an explicit "force refresh" click, bumps it).
 static const uint32_t SYNC_EVERY_MS          = 5UL * 60 * 60 * 1000;  // 5 hours
-static const uint32_t VERSION_CHECK_EVERY_MS = 2UL * 60 * 1000;       // 2 minutes
+static const uint32_t VERSION_CHECK_EVERY_MS = 2UL * 60 * 60 * 1000;       // 2 minutes
 
 // boot-loop detection: if we reboot this many times without a syncOnce() ever
 // completing on the currently running firmware, assume the last OTA was bad.
@@ -305,7 +305,7 @@ bool syncOnce() {
   // it's already up to date and doesn't trigger a redundant full sync.
   lastKnownVersion = doc["version"] | lastKnownVersion;
 
-  Serial.print("✅ Sync OK. allowedPins=");
+  Serial.print("Sync OK. allowedPins=");
   Serial.print((int)allowedPins.size());
   Serial.print(" allowedTags=");
   Serial.println((int)allowedTags.size());
