@@ -1,7 +1,7 @@
 -- Security rules of the website schema, checked as each kind of caller.
 -- Run with `supabase test db` (pgTAP). Everything runs in one transaction and is rolled back.
 begin;
-select plan(20);
+select plan(21);
 
 -- Two signed-in users: one staff member, one ordinary account (e.g. a future resident).
 insert into auth.users (id, email) values
@@ -26,6 +26,13 @@ select is(
   (select count(*)::int from information_schema.role_table_grants
    where grantee in ('anon', 'authenticated') and table_schema = 'public'),
   0, 'API roles have no grants on any table in public');
+
+-- ...including tables the backend's Alembic migrations create later.
+create table public.probe_future_table (id int);
+select is(
+  (select count(*)::int from information_schema.role_table_grants
+   where table_name = 'probe_future_table' and grantee in ('anon', 'authenticated')),
+  0, 'new tables in public get no API grants by default');
 
 -- ---------- anonymous visitor ----------
 

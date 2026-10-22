@@ -17,7 +17,7 @@ from app.core.security import hash_pin
 from app.db.session import SessionLocal
 from app.models import Flat, SyncState, Building, Device, FirmwareRelease, RfidTag, PendingScan
 from app.api.routes.device import router as device_router
-from app.api.routes import admin_router, buildings_router, devices_router, firmware_router, tags_router, scans_router
+from app.api.routes import admin_router, buildings_router, devices_router, firmware_router, tags_router, scans_router, dev_router
 
 app = FastAPI(title="Building Access API (v1)")
 router = APIRouter()
@@ -28,6 +28,7 @@ app.include_router(devices_router)
 app.include_router(firmware_router)
 app.include_router(tags_router)
 app.include_router(scans_router)
+app.include_router(dev_router)
 app.include_router(router)
 
 # Static + templates

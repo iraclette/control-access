@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
-import { Building2, ExternalLink, Home, Images, Inbox, LayoutGrid, LogOut } from "lucide-react";
+import { Building2, Cpu, ExternalLink, Home, Images, Inbox, LayoutGrid, LogOut } from "lucide-react";
 import Logo from "@/components/Logo";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -112,6 +112,8 @@ export default function StaffShell({ children }: { children: (ctx: StaffContext)
     { href: "/staff/projects", label: dict.staff.nav.projects, icon: Building2 },
     { href: "/staff/views", label: dict.staff.nav.views, icon: Images },
     { href: "/staff/leads", label: dict.staff.nav.leads, icon: Inbox },
+    // The developer console is only listed for the dev role (the backend enforces it too).
+    ...(role === "dev" ? [{ href: "/staff/dev", label: dict.staff.dev.nav, icon: Cpu }] : []),
   ];
   const active = (href: string) => (href === "/staff" ? pathname === "/staff" : pathname.startsWith(href));
 
