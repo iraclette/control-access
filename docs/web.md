@@ -61,6 +61,25 @@ flat. Each polygon is a real link with a screen-reader label; keyboard Tab/Enter
 touch screens the first tap previews the flat and the second opens it. Sold flats are
 hatched so status isn't shown by colour alone.
 
+## Tests and CI
+
+Three layers, all runnable locally and in CI (`.github/workflows/web.yml`):
+
+| What | Where | Run locally |
+|---|---|---|
+| Unit tests: prices, filters, flat numbering, slugs, formatting, dictionary placeholders | `apps/web/src/lib/__tests__/` (Vitest) | `npm test` |
+| Database security: RLS and grants checked as anon / signed-in non-staff / staff | `supabase/tests/` (pgTAP) | `supabase test db` (repo root) |
+| Browser tests: public pages, building view, contact form, staff console, region editor, creating projects and flats | `apps/web/e2e/` (Playwright) | `npx playwright test` |
+
+- Browser tests need the local Supabase running (`supabase start`) and reuse a running
+  `npm run dev` (or start one). They create their own test accounts with random passwords,
+  change demo data and put it back, and refuse to run against anything but a local Supabase.
+- CI runs on every pull request touching `apps/web/` or `supabase/`, and on pushes to
+  `platform-v2`: lint, typecheck, unit tests, then a fresh local Supabase in the runner
+  (migrations + seed), pgTAP, a production build and the browser tests. No secrets are
+  used and nothing touches production. On failure the Playwright report is uploaded.
+- The firmware workflow (`firmware-release.yml`) is separate and still only runs on `main`.
+
 ## Deploying (not done yet)
 
 The site will get its own Render service, separate from the access-control backend. The

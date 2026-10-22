@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { useI18n } from "@/i18n/client";
 import { pick } from "@/i18n/format";
 import type { StaffProject } from "@/components/staff/useProjects";
@@ -14,10 +15,13 @@ export default function ProjectPicker({
   onChange: (id: string) => void;
 }) {
   const { lang, dict } = useI18n();
+  const id = useId();
   return (
-    <label className="flex items-center gap-2 text-sm">
-      <span className="text-muted">{dict.staff.flats.project}</span>
+    <div className="flex items-center gap-2 text-sm">
+      {/* Label outside the select: wrapping it would make the options part of its accessible name. */}
+      <label htmlFor={id} className="text-muted">{dict.staff.flats.project}</label>
       <select
+        id={id}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
@@ -28,6 +32,6 @@ export default function ProjectPicker({
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
