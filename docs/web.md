@@ -73,10 +73,17 @@ Staff sign in with a Supabase Auth account that has a row in `site.staff`
 
 - **Overview**: new requests, flats by status per project.
 - **Flats & prices**: per flat, tap Available/Reserved/Sold, set an own price per m² (empty =
-  project price), hide from the site. Changes save immediately. The project's price per m²
-  is edited at the top.
-- **Projects**: names and texts in ka/en/ru, status, completion date, price, cover image,
-  published switch, construction updates.
+  project price), hide from the site, edit number/floor/rooms/area, delete. Changes save
+  immediately. The project's price per m² is edited at the top. Adding flats:
+  - **Add a flat**: one at a time.
+  - **Add flats floor by floor**: describe one floor's layout (rooms + area per flat) and a
+    floor range; numbering continues in order (1, 2, 3…) or goes by floor (101, 102… 201…).
+    Duplicate numbers are refused, and a building grows if flats go above its recorded height.
+- **Projects**: create a project (starts unpublished with one building; its web address is
+  generated from the name, Georgian and Russian transliterated), names and texts in
+  ka/en/ru, status, completion date, price, cover image, published switch, buildings
+  (add/rename/floors/delete), construction updates, delete project (removes everything
+  under it).
 - **Building images**: upload a render or photo per building and view type (front, side,
   floor plan…); images are resized in the browser before upload.
 - **Region editor** (`/staff/views/<id>`): pick a flat, click the corners of its window area,

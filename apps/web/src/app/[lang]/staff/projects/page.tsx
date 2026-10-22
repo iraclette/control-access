@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import StaffShell from "@/components/staff/StaffShell";
 import ProjectPicker from "@/components/staff/ProjectPicker";
 import LocalizedField from "@/components/staff/LocalizedField";
+import NewProjectForm from "@/components/staff/NewProjectForm";
+import BuildingsEditor from "@/components/staff/BuildingsEditor";
 import { useProjects } from "@/components/staff/useProjects";
 import { useI18n } from "@/i18n/client";
 import { formatDate, pick, type Localized } from "@/i18n/format";
@@ -47,6 +49,7 @@ function ProjectsEditor() {
   const supabase = getStaffClient();
   const { projects, setProjects, project, select } = useProjects();
   const [form, setForm] = useState<ProjectForm | null>(null);
+  const [creating, setCreating] = useState(false);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [status, setStatus] = useState<"" | "saving" | "saved" | "error" | "uploading">("");
   const [draft, setDraft] = useState<Omit<Update, "id">>({ happened_on: new Date().toISOString().slice(0, 10), title: {}, body: {} });
@@ -78,6 +81,16 @@ function ProjectsEditor() {
     const { error } = await supabase.from("projects").update(form).eq("id", project.id);
     setStatus(error ? "error" : "saved");
     if (!error) setProjects((list) => list.map((p) => (p.id === project.id ? { ...p, name: form.name, price_per_m2_usd: form.price_per_m2_usd } : p)));
+  }
+
+  async function removeProject() {
+    if (!project || !confirm(dict.staff.projects.deleteProjectConfirm)) return;
+    const { error } = await supabase.from("projects").delete().eq("id", project.id);
+    if (error) return setStatus("error");
+    const rest = projects.filter((p) => p.id !== project.id);
+    setProjects(rest);
+    setForm(null);
+    if (rest[0]) select(rest[0].id);
   }
 
   async function uploadCover(file: File) {
@@ -119,8 +132,27 @@ function ProjectsEditor() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">{dict.staff.nav.projects}</h1>
-        <ProjectPicker projects={projects} value={project?.id} onChange={select} />
+        <div className="flex flex-wrap items-center gap-3">
+          <ProjectPicker projects={projects} value={project?.id} onChange={select} />
+          {!creating && (
+            <button type="button" onClick={() => setCreating(true)} className="rounded-lg bg-brand px-3 py-2 text-sm text-brand-fg">
+              + {dict.staff.projects.newProject}
+            </button>
+          )}
+        </div>
       </div>
+
+      {creating && (
+        <NewProjectForm
+          sortOrder={projects.length}
+          onCancel={() => setCreating(false)}
+          onCreated={(created) => {
+            setProjects((list) => [...list, created]);
+            select(created.id);
+            setCreating(false);
+          }}
+        />
+      )}
 
       {form && (
         <form onSubmit={save} className="grid gap-6 rounded-xl border border-line bg-surface p-5 lg:grid-cols-2">
@@ -171,10 +203,15 @@ function ProjectsEditor() {
                 {dict.staff.common.save}
               </button>
               <span role="status" className={`text-sm ${status === "error" ? "text-red-600" : "text-muted"}`}>{statusText}</span>
+              <button type="button" onClick={removeProject} className="ml-auto text-sm text-red-600 hover:underline">
+                {dict.staff.projects.deleteProject}
+              </button>
             </div>
           </div>
         </form>
       )}
+
+      {form && project && <BuildingsEditor projectId={project.id} />}
 
       {form && (
         <section className="space-y-4 rounded-xl border border-line bg-surface p-5">
