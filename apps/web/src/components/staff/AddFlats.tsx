@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import { fmt, pick, type Localized } from "@/i18n/format";
 import { getStaffClient } from "@/lib/staffClient";
+import { planFlats, type Numbering } from "@/lib/planFlats";
 
 export type StaffBuilding = { id: string; name: Localized; floors: number };
 type Row = { rooms: string; area: string };
-type Numbering = "seq" | "floor";
 
 type Props = {
   buildings: StaffBuilding[];
@@ -17,26 +17,6 @@ type Props = {
 };
 
 const field = "w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm";
-
-// Planned flats for a floor range: the same layout repeated on every floor, numbered either
-// on from the building's highest number (1, 2, 3…) or by floor (101, 102… 201…).
-export function planFlats(opts: {
-  floorFrom: number;
-  floorTo: number;
-  layout: { rooms: number; area: number }[];
-  numbering: Numbering;
-  startAfter: number;
-}) {
-  const flats: { number: string; floor: number; rooms: number; area_m2: number }[] = [];
-  let next = opts.startAfter + 1;
-  for (let floor = opts.floorFrom; floor <= opts.floorTo; floor++) {
-    opts.layout.forEach((row, i) => {
-      const number = opts.numbering === "floor" ? String(floor * 100 + i + 1) : String(next++);
-      flats.push({ number, floor, rooms: row.rooms, area_m2: row.area });
-    });
-  }
-  return flats;
-}
 
 export default function AddFlats({ buildings, existingNumbers, onAdded }: Props) {
   const { lang, dict } = useI18n();
@@ -49,6 +29,7 @@ export default function AddFlats({ buildings, existingNumbers, onAdded }: Props)
   const [numbering, setNumbering] = useState<Numbering>("seq");
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const buildingSelectId = useId();
 
   const building = buildings.find((b) => b.id === buildingId) ?? buildings[0];
   if (!building) return <p className="text-sm text-muted">{dict.staff.flats.noBuilding}</p>;
@@ -108,12 +89,13 @@ export default function AddFlats({ buildings, existingNumbers, onAdded }: Props)
       </div>
 
       {mode !== "none" && buildings.length > 1 && (
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted">{dict.staff.flats.building}</span>
-          <select value={building.id} onChange={(e) => setBuildingId(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm">
+        <div className="flex items-center gap-2 text-sm">
+          {/* Label outside the select: wrapping it would make the options part of its accessible name. */}
+          <label htmlFor={buildingSelectId} className="text-muted">{dict.staff.flats.building}</label>
+          <select id={buildingSelectId} value={building.id} onChange={(e) => setBuildingId(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm">
             {buildings.map((b) => <option key={b.id} value={b.id}>{pick(b.name, lang)}</option>)}
           </select>
-        </label>
+        </div>
       )}
 
       {mode === "one" && (

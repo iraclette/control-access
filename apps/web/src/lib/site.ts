@@ -2,6 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { Localized } from "@/i18n/format";
+import { flatPrice, flatRate } from "@/lib/pricing";
+
+export { flatPrice, flatRate };
 
 export type ProjectStatus = "planned" | "under_construction" | "completed";
 export type FlatStatus = "available" | "reserved" | "sold";
@@ -64,16 +67,6 @@ export type FlatListing = Flat & {
   rate: number | null;
   price: number | null;
 };
-
-// Shown price is always rate × area: the flat's own rate if staff set one, else the project's.
-export function flatRate(flat: Pick<Flat, "price_per_m2_usd">, project: Pick<Project, "price_per_m2_usd">) {
-  return flat.price_per_m2_usd ?? project.price_per_m2_usd ?? null;
-}
-
-export function flatPrice(flat: Pick<Flat, "price_per_m2_usd" | "area_m2">, project: Pick<Project, "price_per_m2_usd">) {
-  const rate = flatRate(flat, project);
-  return rate == null ? null : Math.round(rate * Number(flat.area_m2));
-}
 
 function throwIf(error: { message: string } | null) {
   if (error) throw new Error(error.message);
