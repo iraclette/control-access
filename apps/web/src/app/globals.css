@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/* Colour tokens: light by default, dark when the system asks for it (unless the visitor
+   picked light), or when they picked dark with the toggle (data-theme on <html>).
+   Components only use these tokens, so they never need dark: variants. */
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --fg: #0f1b24;
+  --muted: #5b6b78;
+  --line: #d8dee5;
+  --brand: #0e4158;        /* the logo's teal-navy */
+  --brand-fg: #ffffff;
+  --accent: #1f6f99;       /* links, focus, highlights */
+  --available: #1f8a5b;
+  --reserved: #c98a14;
+  --sold: #8a96a3;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b141b;
+    --surface: #111d26;
+    --surface-2: #172633;
+    --fg: #e8eef3;
+    --muted: #93a4b2;
+    --line: #26394a;
+    --brand: #2f7fa6;
+    --brand-fg: #ffffff;
+    --accent: #6cb6dc;
+    --available: #3fbf86;
+    --reserved: #e0a83a;
+    --sold: #6e7c89;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b141b;
+  --surface: #111d26;
+  --surface-2: #172633;
+  --fg: #e8eef3;
+  --muted: #93a4b2;
+  --line: #26394a;
+  --brand: #2f7fa6;
+  --brand-fg: #ffffff;
+  --accent: #6cb6dc;
+  --available: #3fbf86;
+  --reserved: #e0a83a;
+  --sold: #6e7c89;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-accent: var(--accent);
+  --color-available: var(--available);
+  --color-reserved: var(--reserved);
+  --color-sold: var(--sold);
+
+  /* Latin/Cyrillic in Geist, Georgian in Noto Sans Georgian. */
+  --font-sans: var(--font-geist-sans), var(--font-noto-sans-georgian), sans-serif;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Interactive building views ---------- */
+
+.hotspot polygon {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition: fill 120ms, stroke 120ms;
+  cursor: pointer;
+}
+
+/* Status is shown on hover/focus/selection, plus a hatch for sold so colour isn't the only cue. */
+.hotspot[data-status="available"]:is(:hover, :focus-visible, [data-active="true"]) polygon {
+  fill: color-mix(in srgb, var(--available) 45%, transparent);
+  stroke: var(--available);
+}
+.hotspot[data-status="reserved"]:is(:hover, :focus-visible, [data-active="true"]) polygon {
+  fill: color-mix(in srgb, var(--reserved) 45%, transparent);
+  stroke: var(--reserved);
+}
+.hotspot[data-status="sold"] polygon {
+  fill: url(#sold-hatch);
+}
+.hotspot[data-status="sold"]:is(:hover, :focus-visible, [data-active="true"]) polygon {
+  stroke: var(--sold);
+}
+.hotspot:focus {
+  outline: none;
+}
+
+/* "Show all" mode: every flat tinted by status at once. */
+.overlay-all .hotspot[data-status="available"] polygon {
+  fill: color-mix(in srgb, var(--available) 28%, transparent);
+}
+.overlay-all .hotspot[data-status="reserved"] polygon {
+  fill: color-mix(in srgb, var(--reserved) 28%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotspot polygon {
+    transition: none;
+  }
+}
