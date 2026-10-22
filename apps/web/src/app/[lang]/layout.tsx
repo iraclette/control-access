@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Noto_Sans_Georgian } from "next/font/google";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import { themeInitScript } from "@/components/ThemeToggle";
 import { LOCALES } from "@/i18n/config";
 import { I18nProvider } from "@/i18n/client";
@@ -45,9 +43,7 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
           {IS_DEMO && (
             <div className="bg-brand px-4 py-1.5 text-center text-xs text-brand-fg">{dict.demo.banner}</div>
           )}
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
+          {children}
         </I18nProvider>
       </body>
     </html>

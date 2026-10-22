@@ -65,3 +65,33 @@ hatched so status isn't shown by colour alone.
 
 The site will get its own Render service, separate from the access-control backend. The
 production `site` schema migration is applied by hand after review.
+
+## Staff console (`/staff`)
+
+Staff sign in with a Supabase Auth account that has a row in `site.staff`
+(role `staff`, or `dev` for the developer). Pages:
+
+- **Overview**: new requests, flats by status per project.
+- **Flats & prices**: per flat, tap Available/Reserved/Sold, set an own price per m² (empty =
+  project price), hide from the site. Changes save immediately. The project's price per m²
+  is edited at the top.
+- **Projects**: names and texts in ka/en/ru, status, completion date, price, cover image,
+  published switch, construction updates.
+- **Building images**: upload a render or photo per building and view type (front, side,
+  floor plan…); images are resized in the browser before upload.
+- **Region editor** (`/staff/views/<id>`): pick a flat, click the corners of its window area,
+  click the first point (or Enter) to close. Drag points or the whole shape to adjust.
+  "Paste last shape" copies the last region onto the selected flat and moves it by the
+  measured floor spacing, so stacked floors take a click each.
+- **Requests**: contact-form leads with call/email buttons, status, internal note.
+
+Create accounts with the service role key (prints a generated password once):
+
+```sh
+cd apps/web
+node --env-file=.env.local scripts/create-staff.mjs someone@example.com staff "Their name"
+```
+
+The console only decides what to show; RLS is the real gate. Verified locally: staff can
+edit flats, read leads and upload images; a signed-in non-staff account changes nothing,
+sees no leads and can't upload; nobody (staff included) can change roles through the API.
