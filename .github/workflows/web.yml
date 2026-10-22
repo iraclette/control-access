@@ -1,6 +1,7 @@
 name: Website
 
-# Checks for the website (apps/web) and its database schema (supabase/). Runs on pull
+# Checks for the website (apps/web) and its database schema (supabase/); the browser tests
+# also start the access backend (backend/) for the developer console. Runs on pull
 # requests and on the platform-v2 integration branch. Everything runs against a throwaway
 # local Supabase inside the runner: no secrets, nothing touches production.
 
@@ -9,12 +10,14 @@ on:
     paths:
       - "apps/web/**"
       - "supabase/**"
+      - "backend/**"
       - ".github/workflows/web.yml"
   push:
     branches: [platform-v2]
     paths:
       - "apps/web/**"
       - "supabase/**"
+      - "backend/**"
       - ".github/workflows/web.yml"
 
 concurrency:
@@ -78,6 +81,29 @@ jobs:
             echo "NEXT_PUBLIC_DEMO=1"
           } >> "$GITHUB_ENV"
 
+      # The access backend, for the developer console: its tables (Alembic) and fake data
+      # shaped like the real building, then the API in the background.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Start the access backend
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          PIN_SALT: ci-pin-salt
+          ADMIN_TOKEN: ci-admin-token
+          DEVICE_SECRET: local-device-secret
+          SUPABASE_URL: http://127.0.0.1:54321
+        run: |
+          pip install -r requirements.txt
+          alembic upgrade head
+          python -m scripts.seed_local
+          nohup uvicorn app.main:app --port 8000 > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          echo "ACCESS_API_URL=http://127.0.0.1:8000" >> "$GITHUB_ENV"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -95,4 +121,5 @@ jobs:
           path: |
             apps/web/playwright-report
             apps/web/test-results
+            /tmp/backend.log
           retention-days: 7

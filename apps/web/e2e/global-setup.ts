@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
-// Creates (or resets) the two test accounts with fresh random passwords for this run:
-// a staff member, and a signed-in account with no staff role. Values set on process.env
+// Creates (or resets) the test accounts with fresh random passwords for this run:
+// a staff member, a developer, and a signed-in account with no staff role. Values set on process.env
 // here are visible to the tests.
 export default async function globalSetup() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,7 +15,7 @@ export default async function globalSetup() {
   const supabase = createClient(url, key, { auth: { persistSession: false } });
   const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
 
-  async function ensure(email: string, role: "staff" | null) {
+  async function ensure(email: string, role: "staff" | "dev" | null) {
     const password = randomBytes(12).toString("base64url");
     const existing = list?.users.find((u) => u.email === email);
     const id = existing
@@ -28,4 +28,5 @@ export default async function globalSetup() {
 
   process.env.E2E_STAFF_PASSWORD = await ensure("e2e-staff@test.local", "staff");
   process.env.E2E_OUTSIDER_PASSWORD = await ensure("e2e-outsider@test.local", null);
+  process.env.E2E_DEV_PASSWORD = await ensure("e2e-dev@test.local", "dev");
 }

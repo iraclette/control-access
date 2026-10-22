@@ -121,3 +121,11 @@ node --env-file=.env.local scripts/create-staff.mjs someone@example.com staff "T
 The console only decides what to show; RLS is the real gate. Verified locally: staff can
 edit flats, read leads and upload images; a signed-in non-staff account changes nothing,
 sees no leads and can't upload; nobody (staff included) can change roles through the API.
+
+## Developer console (`/staff/dev`)
+
+Only listed for the `dev` role. Shows the access-control system read-only: flats/tags/devices
+counts, every controller with its firmware and whether it will update on its next sync,
+firmware releases with how many devices run each, buildings, and unassigned tag scans. Data
+comes from the backend's `/v2/dev` API through the server-side relay
+`src/app/api/dev/[...path]/route.ts` (needs `ACCESS_API_URL`); see `docs/backend.md`.

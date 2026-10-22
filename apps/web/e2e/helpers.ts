@@ -8,6 +8,7 @@ export const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process
 });
 
 export const STAFF = { email: "e2e-staff@test.local", password: () => process.env.E2E_STAFF_PASSWORD! };
+export const DEV = { email: "e2e-dev@test.local", password: () => process.env.E2E_DEV_PASSWORD! };
 export const OUTSIDER = { email: "e2e-outsider@test.local", password: () => process.env.E2E_OUTSIDER_PASSWORD! };
 
 export async function signIn(page: Page, who: { email: string; password: () => string }) {
@@ -26,4 +27,20 @@ export async function projectBySlug(slug: string) {
 export async function flatByNumber(buildingId: string, number: string) {
   const { data } = await admin.from("flats").select("id, status, floor").eq("building_id", buildingId).eq("number", number).single();
   return data as { id: string; status: string; floor: number };
+}
+
+// Access token for direct API calls, as the given account.
+export async function tokenFor(who: { email: string; password: () => string }) {
+  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+  const { data, error } = await client.auth.signInWithPassword({ email: who.email, password: who.password() });
+  if (error) throw error;
+  return data.session!.access_token;
+}
+
+// The developer console's data comes from the access backend; tests that need it skip
+// when it isn't running (CI starts it).
+export async function backendUp() {
+  const base = process.env.ACCESS_API_URL;
+  if (!base) return false;
+  return fetch(`${base}/health`).then((r) => r.ok, () => false);
 }

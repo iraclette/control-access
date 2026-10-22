@@ -8,5 +8,10 @@ class Settings(BaseSettings):
     ADMIN_TOKEN : str
     DEVICE_SECRET : str
 
+    # Staff logins for the /v2 endpoints come from Supabase Auth. Optional so the service
+    # still starts without them; the /v2 endpoints then answer 503.
+    SUPABASE_URL : str | None = None          # tokens verified via its JWKS (ES256/RS256 keys)
+    SUPABASE_JWT_SECRET : str | None = None   # legacy HS256 projects
+
 settings = Settings()
 
