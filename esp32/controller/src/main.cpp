@@ -4,13 +4,13 @@
 #include <ArduinoJson.h>
 #include <Wiegand.h>
 #include "mbedtls/sha256.h"
-#include <map>
 #include <Update.h>
 #include <WiFiClientSecure.h>
 #include <Preferences.h>
 #include <time.h>
 #include "certs.h"
 #include "secrets.h"
+#include "sync_parser.h"
 
 // ================= CONFIG =================
 #define D0_PIN 26
@@ -49,15 +49,19 @@ static const uint32_t PIN_TIMEOUT_MS = 8000;
 // runs immediately whenever that cheap check notices the backend's version counter
 // changed (any admin edit, or an explicit "force refresh" click, bumps it).
 static const uint32_t SYNC_EVERY_MS          = 5UL * 60 * 60 * 1000;  // 5 hours
-static const uint32_t VERSION_CHECK_EVERY_MS = 2UL * 60 * 60 * 1000;       // 2 minutes
+static const uint32_t VERSION_CHECK_EVERY_MS = 2UL * 60 * 60 * 1000;       // 2 hours
 
 // boot-loop detection: if we reboot this many times without a syncOnce() ever
 // completing on the currently running firmware, assume the last OTA was bad.
 static const uint32_t BOOT_FAIL_THRESHOLD = 3;
 Preferences prefs;
 
-std::map<String, bool> allowedPins;
-std::map<String, bool> allowedTags;
+// Only *enabled* hashes are kept (a disabled one behaves exactly like an unknown one),
+// stored as raw 32-byte digests in a sorted vector: ~32 bytes per key instead of the
+// ~150+ a std::map<String,bool> node costs, so the list can grow a lot before the
+// heap runs out.
+std::vector<KeyHash> allowedPins;
+std::vector<KeyHash> allowedTags;
 
 WIEGAND wg;
 String pinBuffer = "";
@@ -244,7 +248,11 @@ bool otaDownloadAndUpdate(String binUrl, const char* expectedSha256 /* can be nu
 bool syncOnce() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  String body;
+  // Fallbacks: anything the response doesn't carry keeps its current value.
+  SyncData data;
+  data.version = lastKnownVersion;
+  data.unlockMs = unlockMs;
+  bool parsed;
   {
     // Scoped so client/http (and their TLS buffers) are fully destructed before
     // we get to the OTA download below -- otherwise this connection's SSL context
@@ -254,6 +262,8 @@ bool syncOnce() {
     client.setCACert(ROOT_CA);
 
     HTTPClient http;
+    // HTTP/1.0 => no chunked transfer encoding, so the raw stream is pure JSON.
+    http.useHTTP10(true);
     String url = String(BASE_URL) + "/device/" + deviceId + "/sync";
     if (!http.begin(client, url)) {
       Serial.println("Sync http.begin failed");
@@ -270,52 +280,45 @@ bool syncOnce() {
       return false;
     }
 
-    body = http.getString();
+    Stream &stream = http.getStream();
+    stream.setTimeout(5000);
+    parsed = parseSync(stream, data);
     http.end();
   }
 
-  StaticJsonDocument<32768> doc;
-  auto err = deserializeJson(doc, body);
-  if (err) {
-    Serial.print("Sync JSON error: ");
-    Serial.println(err.c_str());
+  if (!parsed) {
+    // Keep the previous lists rather than locking everyone out, but make it visible.
+    Serial.print("Sync parse failed, freeHeap=");
+    Serial.println(ESP.getFreeHeap());
+    logRemote("SYNC PARSE FAILED: pins=" + String(data.pins.size()) + " tags=" + String(data.tags.size()) +
+              " freeHeap=" + String(ESP.getFreeHeap()) + " -- keeping previous key lists");
     return false;
   }
 
-  // entries
-  allowedPins.clear();
-  for (JsonObject e : doc["entries"].as<JsonArray>()) {
-    const char* h = e["pin_hash"];
-    bool en = e["access_enabled"] | false;
-    if (h && *h) allowedPins[String(h)] = en;
-  }
+  finalizeKeys(data.pins);
+  finalizeKeys(data.tags);
+  allowedPins.swap(data.pins);
+  allowedTags.swap(data.tags);
 
-  // tags
-  allowedTags.clear();
-  for (JsonObject e : doc["tags"].as<JsonArray>()) {
-    const char* h = e["hash"];
-    bool en = e["access_enabled"] | false;
-    if (h && *h) allowedTags[String(h)] = en;
-  }
-
-  // unlockMs optionnel si tu l'ajoutes côté backend
-  unlockMs = doc["device"]["unlock_ms"] | unlockMs;  // fallback si absent
+  unlockMs = data.unlockMs;
 
   // Remember the version this sync reflects, so the lightweight check-in knows
   // it's already up to date and doesn't trigger a redundant full sync.
-  lastKnownVersion = doc["version"] | lastKnownVersion;
+  lastKnownVersion = data.version;
 
   Serial.print("Sync OK. allowedPins=");
   Serial.print((int)allowedPins.size());
   Serial.print(" allowedTags=");
-  Serial.println((int)allowedTags.size());
+  Serial.print((int)allowedTags.size());
+  Serial.print(" freeHeap=");
+  Serial.println(ESP.getFreeHeap());
   Serial.print("unlockMs=");
   Serial.println(unlockMs);
   // OTA embedded in sync
-  if (doc["ota"].is<JsonObject>()) {
-    String targetVer = doc["ota"]["version"] | "";
-    String binUrl    = doc["ota"]["url"] | "";
-    String shaStr    = doc["ota"]["sha256"] | "";
+  {
+    const String &targetVer = data.otaVersion;
+    const String &binUrl    = data.otaUrl;
+    const String &shaStr    = data.otaSha256;
 
     if (targetVer.length() > 0 && binUrl.length() > 0 && targetVer != CURRENT_FW_VERSION) {
       Serial.print("🧩 OTA available. target=");
@@ -408,7 +411,7 @@ void handlePin() {
   Serial.print("Hash: ");
   Serial.println(hash);
 
-  if (allowedPins.count(hash) && allowedPins[hash]) {
+  if (isAllowed(allowedPins, hash)) {
     Serial.println("ACCESS GRANTED");
     unlockDoor();
   } else {
@@ -426,7 +429,7 @@ void handleTag(){
   Serial.print("Hash: ");
   Serial.println(hash);
 
-  if (allowedTags.count(hash) && allowedTags[hash]) {
+  if (isAllowed(allowedTags, hash)) {
     Serial.println("ACCESS GRANTED");
     unlockDoor();
   } else {
