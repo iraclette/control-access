@@ -15,6 +15,19 @@ from app.schemas.tag import ScanIn
 router = APIRouter(prefix="/device", tags=["device"])
 
 
+def is_legacy_firmware(version: str | None) -> bool:
+    """True for firmware that parses /sync in one piece (1.0.12 and older)."""
+    try:
+        return tuple(int(p) for p in (version or "").split(".")) < (1, 0, 13)
+    except ValueError:
+        return False
+
+
+def legacy_cap_applies(dev: Device) -> bool:
+    listed = {d.strip() for d in settings.LEGACY_SYNC_DEVICES.split(",") if d.strip()}
+    return settings.LEGACY_SYNC_MAX_TAGS > 0 and dev.device_id in listed and is_legacy_firmware(dev.fw_current_version)
+
+
 def require_device(db: Session, device_id: str, request: Request) -> Device:
     dev = db.scalar(select(Device).where(Device.device_id == device_id))
     if dev is None or not dev.enabled:
@@ -69,6 +82,7 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
             select(RfidTag, Flat.access_enabled)
             .join(Flat, RfidTag.flat_id == Flat.id)
             .where(Flat.building_id == dev.building_id)
+            .order_by(RfidTag.id)
         ).all()
         tags = [
             TagEntry(hash=tag.hash, access_enabled=tag.enabled and flat_enabled)
@@ -90,6 +104,11 @@ def sync(device_id: str, request: Request, db: Session = Depends(get_db)):
                 url=f"{base}/device/firmware/{release.filename}",
                 sha256=release.sha256,
             )
+
+    # See settings.LEGACY_SYNC_MAX_TAGS. Disabled tags are dropped first: old firmware
+    # treats a missing tag exactly like a disabled one.
+    if ota is not None and legacy_cap_applies(dev):
+        tags = [t for t in tags if t.access_enabled][: settings.LEGACY_SYNC_MAX_TAGS]
 
     db.commit()
     return SyncSnapshot(
